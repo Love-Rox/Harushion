@@ -189,3 +189,20 @@
 .epic-header-body .header-right {
   margin-left: auto;
 }
+
+/* タイトル行: 左にタイトル(折り返し可)、右端に進捗インジケーター */
+.epic-title-row-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.epic-title-row-wrap .epic-title-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.epic-title-row-wrap .epic-progress {
+  flex-shrink: 0;
+  margin-left: auto;
+}

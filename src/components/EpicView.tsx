@@ -95,28 +95,30 @@ export function EpicView({
   return (
     <div className="main epic-view">
       <header className="header epic-header">
-        <h1 className="app-title epic-title epic-title-row">
-          {epic.color && (
-            <span className="epic-title-chip" style={{ backgroundColor: `#${epic.color}` }} />
-          )}
-          {epic.name}
-        </h1>
+        <div className="epic-title-row-wrap">
+          <h1 className="app-title epic-title epic-title-row">
+            {epic.color && (
+              <span className="epic-title-chip" style={{ backgroundColor: `#${epic.color}` }} />
+            )}
+            {epic.name}
+          </h1>
+          <div className="epic-progress">
+            <div className="epic-progress-bar">
+              <div
+                className="epic-progress-fill"
+                style={{
+                  width: `${progressPct}%`,
+                  backgroundColor: epic.color ? `#${epic.color}` : "var(--accent)",
+                }}
+              />
+            </div>
+            <span className="epic-progress-text">
+              {epic.doneCount}/{epic.itemCount}
+            </span>
+          </div>
+        </div>
         <div className="epic-header-body">
           <div className="header-title">
-            <div className="epic-progress">
-              <div className="epic-progress-bar">
-                <div
-                  className="epic-progress-fill"
-                  style={{
-                    width: `${progressPct}%`,
-                    backgroundColor: epic.color ? `#${epic.color}` : "var(--accent)",
-                  }}
-                />
-              </div>
-              <span className="epic-progress-text">
-                {epic.doneCount}/{epic.itemCount}
-              </span>
-            </div>
             {epic.note && <p className="epic-note fg-muted">{epic.note}</p>}
           </div>
           <div className="header-right">
