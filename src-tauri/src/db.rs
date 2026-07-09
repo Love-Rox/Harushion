@@ -38,6 +38,7 @@ pub struct StoredItem {
     pub repo: String,
     pub comments: i64,
     pub milestone: Option<String>,
+    pub assignees: Vec<String>,
     pub is_read: bool,
 }
 
@@ -102,7 +103,8 @@ CREATE TABLE IF NOT EXISTS items (
   author_avatar TEXT,
   repo TEXT NOT NULL,
   comments INTEGER NOT NULL DEFAULT 0,
-  milestone TEXT
+  milestone TEXT,
+  assignees TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS stream_items (
@@ -242,6 +244,7 @@ impl Db {
         // 既存 DB へのカラム追加移行(すでに存在する場合のエラーは無視)
         let _ = conn.execute("ALTER TABLE streams ADD COLUMN color TEXT", []);
         let _ = conn.execute("ALTER TABLE items ADD COLUMN milestone TEXT", []);
+        let _ = conn.execute("ALTER TABLE items ADD COLUMN assignees TEXT NOT NULL DEFAULT ''", []);
 
         // 初回起動時のシード Stream
         let count: i64 = conn
@@ -355,7 +358,7 @@ impl Db {
         let conn = self.lock();
         let sql = format!(
             "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
-                    i.author, i.author_avatar, i.repo, i.comments, i.milestone, {IS_READ_EXPR}
+                    i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees, {IS_READ_EXPR}
              FROM items i
              JOIN stream_items si ON si.item_url = i.url
              LEFT JOIN read_state r ON r.item_url = i.url
@@ -379,7 +382,8 @@ impl Db {
                     repo: row.get(9)?,
                     comments: row.get(10)?,
                     milestone: row.get(11)?,
-                    is_read: row.get(12)?,
+                    assignees: split_assignees(row.get::<_, String>(12)?),
+                    is_read: row.get(13)?,
                 })
             })
             .map_err(db_err)?
@@ -409,14 +413,15 @@ impl Db {
 
             tx.execute(
                 "INSERT INTO items (url, kind, number, title, state, is_draft, updated_at,
-                                    author, author_avatar, repo, comments, milestone)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                                    author, author_avatar, repo, comments, milestone, assignees)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                  ON CONFLICT(url) DO UPDATE SET
                    kind = excluded.kind, number = excluded.number, title = excluded.title,
                    state = excluded.state, is_draft = excluded.is_draft,
                    updated_at = excluded.updated_at, author = excluded.author,
                    author_avatar = excluded.author_avatar, repo = excluded.repo,
-                   comments = excluded.comments, milestone = excluded.milestone",
+                   comments = excluded.comments, milestone = excluded.milestone,
+                   assignees = excluded.assignees",
                 params![
                     item.url,
                     item.kind,
@@ -429,7 +434,8 @@ impl Db {
                     item.author_avatar,
                     item.repo,
                     item.comments,
-                    item.milestone
+                    item.milestone,
+                    item.assignees.join(",")
                 ],
             )
             .map_err(db_err)?;
@@ -767,7 +773,7 @@ impl Db {
         let conn = self.lock();
         let sql = format!(
             "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
-                    i.author, i.author_avatar, i.repo, i.comments, i.milestone, {IS_READ_EXPR},
+                    i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees, {IS_READ_EXPR},
                     ei.position
              FROM epic_items ei
              JOIN items i ON i.url = ei.item_url
@@ -792,9 +798,10 @@ impl Db {
                         repo: row.get(9)?,
                         comments: row.get(10)?,
                         milestone: row.get(11)?,
-                        is_read: row.get(12)?,
+                        assignees: split_assignees(row.get::<_, String>(12)?),
+                        is_read: row.get(13)?,
                     },
-                    epic_position: row.get(13)?,
+                    epic_position: row.get(14)?,
                 })
             })
             .map_err(db_err)?
@@ -899,6 +906,30 @@ impl Db {
         Ok(rows)
     }
 
+    /// 全 Stream に対して掃除を実行し、1件でも外した Stream の id を返す。
+    /// 状態の一括更新(エピックのリフレッシュ等)の後に呼ぶ。
+    pub fn prune_all_streams(&self) -> Result<Vec<i64>, String> {
+        let streams: Vec<(i64, String)> = {
+            let conn = self.lock();
+            let mut stmt = conn
+                .prepare("SELECT id, query FROM streams")
+                .map_err(db_err)?;
+            let rows = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map_err(db_err)?
+                .collect::<Result<_, _>>()
+                .map_err(db_err)?;
+            rows
+        };
+        let mut pruned = Vec::new();
+        for (id, query) in streams {
+            if self.prune_stream_links(id, &query)? > 0 {
+                pruned.push(id);
+            }
+        }
+        Ok(pruned)
+    }
+
     /// バッチ取得した最新状態を反映する(updated_at には触れない = 未読を変えない)
     pub fn update_item_states(&self, states: &[crate::github::ItemStatus]) -> Result<(), String> {
         let mut conn = self.lock();
@@ -956,6 +987,14 @@ impl Db {
     }
 }
 
+fn split_assignees(raw: String) -> Vec<String> {
+    if raw.is_empty() {
+        Vec::new()
+    } else {
+        raw.split(',').map(String::from).collect()
+    }
+}
+
 fn row_to_epic(row: &rusqlite::Row<'_>) -> rusqlite::Result<Epic> {
     Ok(Epic {
         id: row.get(0)?,
@@ -1005,6 +1044,7 @@ mod tests {
             repo: "o/r".into(),
             comments: 0,
             milestone: None,
+            assignees: Vec::new(),
         }
     }
 
@@ -1168,6 +1208,7 @@ mod tests {
             repo: repo.into(),
             comments: 0,
             milestone: None,
+            assignees: Vec::new(),
         }
     }
 
@@ -1301,6 +1342,7 @@ mod tests {
             repo: "o/r".into(),
             comments: 0,
             milestone: milestone.map(String::from),
+            assignees: Vec::new(),
         }
     }
 
@@ -1386,6 +1428,29 @@ mod tests {
         let urls: Vec<&str> = rows.iter().map(|r| r.item.url.as_str()).collect();
         assert_eq!(urls, ["m2", "m1"], "番号昇順で初期リリース順が付く");
         assert_eq!(db.item_epic_ids("m1").unwrap(), [eid]);
+    }
+
+    #[test]
+    fn prune_all_streams_reports_affected_streams() {
+        let db = test_db();
+        let open_s = db.create_stream("open", "is:pr is:open", None, 60, None).unwrap();
+        let all_s = db.create_stream("all", "involves:@me", None, 60, None).unwrap();
+        db.upsert_items(open_s, &[pr_item("u1", "OPEN", false, "o/r")]).unwrap();
+        db.upsert_items(all_s, &[pr_item("u1", "OPEN", false, "o/r")]).unwrap();
+
+        // エピックのリフレッシュ相当: 状態だけ MERGED に変わった
+        db.update_item_states(&[crate::github::ItemStatus {
+            url: "u1".into(),
+            state: "MERGED".into(),
+            is_draft: false,
+            title: "t".into(),
+            milestone: None,
+        }]).unwrap();
+
+        let pruned = db.prune_all_streams().unwrap();
+        assert_eq!(pruned, [open_s], "is:open の Stream だけが掃除対象");
+        assert!(db.list_items(open_s, false).unwrap().is_empty());
+        assert_eq!(db.list_items(all_s, false).unwrap().len(), 1);
     }
 
     #[test]

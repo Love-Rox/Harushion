@@ -233,7 +233,12 @@ async fn refresh_epic_items(
         .collect();
     if !urls.is_empty() {
         let states = github::fetch_item_states(&state, &urls).await?;
-        app.state::<Db>().update_item_states(&states)?;
+        let db = app.state::<Db>();
+        db.update_item_states(&states)?;
+        // 状態が変わったアイテムが Stream の条件から外れていないか確認して掃除
+        for stream_id in db.prune_all_streams()? {
+            let _ = app.emit("items-updated", serde_json::json!({ "streamId": stream_id }));
+        }
     }
     app.state::<Db>().list_epic_items(epic_id)
 }

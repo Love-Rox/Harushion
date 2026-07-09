@@ -146,6 +146,7 @@ pub struct Item {
     pub repo: String,
     pub comments: i64,
     pub milestone: Option<String>,
+    pub assignees: Vec<String>,
 }
 
 pub async fn fetch_viewer(state: &AppState) -> Result<Viewer, String> {
@@ -170,6 +171,7 @@ query($q: String!, $first: Int!, $after: String) {
         repository { nameWithOwner }
         comments { totalCount }
         milestone { title }
+        assignees(first: 10) { nodes { login } }
       }
       ... on PullRequest {
         number title url state isDraft updatedAt
@@ -177,6 +179,7 @@ query($q: String!, $first: Int!, $after: String) {
         repository { nameWithOwner }
         comments { totalCount }
         milestone { title }
+        assignees(first: 10) { nodes { login } }
       }
     }
   }
@@ -229,6 +232,10 @@ pub async fn search_items(state: &AppState, query: &str, max_total: u32) -> Resu
                     .to_string(),
                 comments: node["comments"]["totalCount"].as_i64().unwrap_or(0),
                 milestone: node["milestone"]["title"].as_str().map(String::from),
+                assignees: node["assignees"]["nodes"]
+                    .as_array()
+                    .map(|ns| ns.iter().filter_map(|n| n["login"].as_str().map(String::from)).collect())
+                    .unwrap_or_default(),
             })
         }));
 

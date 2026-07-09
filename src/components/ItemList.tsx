@@ -124,10 +124,11 @@ export function ItemList({
         {stream &&
           items.slice(0, renderCount).map((item) => {
             const selected = item.url === selectedItemUrl;
+            const assignedToMe = viewer != null && item.assignees.includes(viewer.login);
             return (
               <div
                 key={item.url}
-                className={`item ${item.isRead ? "read" : "unread"}${selected ? " selected" : ""}`}
+                className={`item ${item.isRead ? "read" : "unread"}${selected ? " selected" : ""}${assignedToMe ? " assigned" : ""}`}
               >
                 <button
                   className="read-toggle"
@@ -147,6 +148,9 @@ export function ItemList({
                   <span className="item-main">
                     <span className="item-title">{item.title}</span>
                     <span className="item-meta">
+                      {assignedToMe && (
+                        <span className="assigned-badge">{t("list.assignedYou")}</span>
+                      )}
                       {item.repo}#{item.number}
                       {item.author && <> · {item.author}</>}
                       {" · "}

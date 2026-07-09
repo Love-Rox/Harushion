@@ -58,6 +58,7 @@ export const en: Messages = {
   list: {
     unreadOnly: "Unread only",
     markAllRead: "Mark all read",
+    assignedYou: "Assigned",
     noStream: "No streams",
     createStream: "+ Stream",
     emptyItems: "No items",

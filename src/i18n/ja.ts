@@ -57,6 +57,7 @@ export const ja = {
   list: {
     unreadOnly: "未読のみ",
     markAllRead: "全て既読",
+    assignedYou: "担当",
     noStream: "ストリームがありません",
     createStream: "+ Stream",
     emptyItems: "アイテムがありません",

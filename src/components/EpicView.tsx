@@ -144,12 +144,13 @@ export function EpicView({
         )}
         {items.map((item, index) => {
           const selected = item.url === selectedItemUrl;
+          const assignedToMe = viewer != null && item.assignees.includes(viewer.login);
           const indicatorClass =
             dropIndicator?.url === item.url ? ` drop-${dropIndicator.position}` : "";
           return (
             <div
               key={item.url}
-              className={`epic-item-row${selected ? " selected" : ""}${draggedUrl === item.url ? " dragging" : ""}${indicatorClass}`}
+              className={`epic-item-row${selected ? " selected" : ""}${draggedUrl === item.url ? " dragging" : ""}${assignedToMe ? " assigned" : ""}${indicatorClass}`}
               draggable
               onDragStart={(e) => handleDragStart(e, item.url)}
               onDragEnd={handleDragEnd}

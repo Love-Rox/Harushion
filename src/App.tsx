@@ -252,19 +252,6 @@ function App() {
     setItemEpicIds([]);
   }, [selectedStreamId]);
 
-  // Selected item disappeared from the current list (e.g. filtered out): clear selection.
-  useEffect(() => {
-    setSelectedItem((prev) => {
-      if (prev && !items.some((i) => i.url === prev.url)) {
-        setItemDetail(null);
-        setDetailError(null);
-        setItemEpicIds([]);
-        return null;
-      }
-      return prev;
-    });
-  }, [items]);
-
   // Switched to a different epic's view: clear detail selection.
   const openEpicId = view.type === "epic" ? view.epicId : null;
   useEffect(() => {

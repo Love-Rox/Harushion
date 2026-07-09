@@ -43,6 +43,7 @@ export type Item = {
   repo: string;
   milestone: string | null;
   comments: number;
+  assignees: string[];
   isRead: boolean;
 };
 
