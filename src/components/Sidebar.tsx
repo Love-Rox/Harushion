@@ -5,6 +5,8 @@ import type { Stream } from "../types";
 import { useI18n } from "../i18n";
 import type { Locale } from "../i18n";
 import "./Sidebar.css";
+import { getThemePreference, setThemePreference } from "../theme";
+import type { ThemePreference } from "../theme";
 
 type Props = {
   streams: Stream[];
@@ -65,6 +67,7 @@ export function Sidebar({
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [colorPopoverFolder, setColorPopoverFolder] = useState<string | null>(null);
+  const [theme, setTheme] = useState<ThemePreference>(getThemePreference());
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
   const [draggedStream, setDraggedStream] = useState<{ id: number; folder: string | null } | null>(
@@ -442,6 +445,22 @@ export function Sidebar({
         >
           <option value="ja">日本語</option>
           <option value="en">English</option>
+        </select>
+        <label className="sidebar-locale-label" htmlFor="sidebar-theme-select">
+          {t("sidebar.themeLabel")}
+        </label>
+        <select
+          id="sidebar-theme-select"
+          value={theme}
+          onChange={(e) => {
+            const next = e.target.value as ThemePreference;
+            setThemePreference(next);
+            setTheme(next);
+          }}
+        >
+          <option value="system">{t("sidebar.themeSystem")}</option>
+          <option value="light">{t("sidebar.themeLight")}</option>
+          <option value="dark">{t("sidebar.themeDark")}</option>
         </select>
       </div>
     </aside>

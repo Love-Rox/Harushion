@@ -42,6 +42,10 @@ export const ja = {
     addingRepo: "追加中…",
     addRepoButton: "+ リポジトリ",
     localeLabel: "言語",
+    themeLabel: "テーマ",
+    themeSystem: "システム",
+    themeLight: "ライト",
+    themeDark: "ダーク",
   },
   list: {
     unreadOnly: "未読のみ",

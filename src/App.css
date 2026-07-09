@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #f6f7f9;
   --bg-panel: #ffffff;
   --fg: #1c2128;
@@ -14,19 +14,19 @@
   font-size: 14px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0d1117;
-    --bg-panel: #161b22;
-    --fg: #e6edf3;
-    --fg-muted: #8d96a0;
-    --border: #30363d;
-    --accent: #4493f8;
-    --open: #3fb950;
-    --merged: #ab7df8;
-    --closed: #f85149;
-    --draft: #8d96a0;
-  }
+/* 解決済みテーマは theme.ts が <html data-theme> へ常時反映する(system は OS に追従) */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --bg-panel: #161b22;
+  --fg: #e6edf3;
+  --fg-muted: #8d96a0;
+  --border: #30363d;
+  --accent: #4493f8;
+  --open: #3fb950;
+  --merged: #ab7df8;
+  --closed: #f85149;
+  --draft: #8d96a0;
 }
 
 * {

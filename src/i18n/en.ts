@@ -43,6 +43,10 @@ export const en: Messages = {
     addingRepo: "Adding…",
     addRepoButton: "+ Repository",
     localeLabel: "Language",
+    themeLabel: "Theme",
+    themeSystem: "System",
+    themeLight: "Light",
+    themeDark: "Dark",
   },
   list: {
     unreadOnly: "Unread only",
