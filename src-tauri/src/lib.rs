@@ -4,6 +4,7 @@ mod gh;
 mod github;
 mod graph;
 mod poller;
+mod updater;
 
 use db::{Db, StoredItem, Stream};
 use gh::ItemAction;
@@ -153,6 +154,11 @@ async fn open_in_app_browser(app: AppHandle, url: String) -> Result<(), String> 
 }
 
 #[tauri::command]
+async fn check_for_update(state: State<'_, AppState>) -> Result<Option<updater::UpdateInfo>, String> {
+    updater::check_update(&state).await
+}
+
+#[tauri::command]
 fn list_graph_repos(db: State<'_, Db>) -> Result<Vec<String>, String> {
     db.list_graph_repos()
 }
@@ -218,6 +224,7 @@ pub fn run() {
             let db = Db::open(&db_path).map_err(std::io::Error::other)?;
             app.manage(db);
             poller::spawn(app.handle().clone());
+            updater::spawn(app.handle().clone());
 
             // 起動スモーク用フック: ウィンドウ生成→navigate の実経路を CI 外で確認する
             if std::env::var("HARUSHION_SMOKE_BROWSER").is_ok() {
@@ -259,7 +266,8 @@ pub fn run() {
             set_folder_color,
             reorder_streams,
             list_folder_order,
-            reorder_folders
+            reorder_folders,
+            check_for_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

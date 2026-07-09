@@ -12,6 +12,16 @@ GitHub の Issue/PR を Stream(検索クエリ)単位でウォッチするデス
 - **ブランチグラフ**: ブランチ状況を DAG で可視化
 - **軽量**: Rust バックエンド + SQLite、フロントは表示に専念
 
+## インストール (macOS)
+
+```sh
+brew tap love-rox/tap
+brew install --cask --no-quarantine harushion
+```
+
+無署名配布のため `--no-quarantine` を推奨します(付けない場合は初回起動時に右クリック → 開く)。
+更新は `brew upgrade --cask harushion`。新しいバージョンが出るとアプリ内バナーでも通知されます。
+
 ## 必要環境
 
 - [GitHub CLI](https://cli.github.com)(`gh auth login` 済みであること)

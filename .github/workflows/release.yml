@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # ビルド番号 (git rev-list --count) のため全履歴を取得
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Harushion ${{ github.ref_name }}"
+          releaseBody: |
+            Homebrew でのインストール / 更新:
+            ```
+            brew install --cask --no-quarantine love-rox/tap/harushion
+            brew upgrade --cask harushion
+            ```
+            ※ 無署名配布のため `--no-quarantine` を推奨(付けない場合は初回に右クリック→開く)。
+          args: --target universal-apple-darwin

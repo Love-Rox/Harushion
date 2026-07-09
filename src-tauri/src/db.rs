@@ -551,10 +551,17 @@ impl Db {
     }
 
     /// Stream のクエリに確実に合致しなくなったアイテムのリンクを外し、外した件数を返す。
+    /// query は改行区切りの複数条件セット(OR)。「すべての条件セットに違反する」
+    /// 場合のみ外す。ローカル判定できない条件セットが 1 つでもあれば何も外さない。
     pub fn prune_stream_links(&self, stream_id: i64, query: &str) -> Result<usize, String> {
-        let filters = parse_local_filters(query);
-        if filters == LocalFilters::default() {
-            return Ok(0); // ローカル判定できる条件がない
+        let filters_list: Vec<LocalFilters> = query
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(parse_local_filters)
+            .collect();
+        if filters_list.is_empty() || filters_list.iter().any(|f| *f == LocalFilters::default()) {
+            return Ok(0);
         }
         let conn = self.lock();
         let mut stmt = conn
@@ -575,7 +582,9 @@ impl Db {
 
         let to_remove: Vec<&String> = rows
             .iter()
-            .filter(|(_, kind, state, is_draft, repo)| filters.violates(kind, state, *is_draft, repo))
+            .filter(|(_, kind, state, is_draft, repo)| {
+                filters_list.iter().all(|f| f.violates(kind, state, *is_draft, repo))
+            })
             .map(|(url, ..)| url)
             .collect();
         for url in &to_remove {
@@ -933,6 +942,38 @@ mod tests {
         assert_eq!(db.prune_stream_links(id, "org:love-rox -is:draft").unwrap(), 2);
         let urls: Vec<String> = db.list_items(id, false).unwrap().into_iter().map(|i| i.url).collect();
         assert_eq!(urls, ["u-ok"]);
+    }
+
+    #[test]
+    fn prune_multi_query_keeps_items_matching_any_set() {
+        let db = test_db();
+        let q = "is:pr is:open\nis:pr is:merged";
+        let id = db.create_stream("s", q, None, 60, None).unwrap();
+        db.upsert_items(
+            id,
+            &[
+                pr_item("u-open", "OPEN", false, "o/r"),
+                pr_item("u-merged", "MERGED", false, "o/r"),
+                pr_item("u-closed", "CLOSED", false, "o/r"),
+            ],
+        )
+        .unwrap();
+
+        // OPEN と MERGED はどちらかの条件セットに合致するので残り、CLOSED だけ外れる
+        assert_eq!(db.prune_stream_links(id, q).unwrap(), 1);
+        let urls: Vec<String> = db.list_items(id, false).unwrap().into_iter().map(|i| i.url).collect();
+        assert!(urls.contains(&"u-open".to_string()) && urls.contains(&"u-merged".to_string()));
+        assert!(!urls.contains(&"u-closed".to_string()));
+    }
+
+    #[test]
+    fn prune_multi_query_skips_when_any_set_is_unjudgeable() {
+        let db = test_db();
+        let q = "is:pr is:open\ninvolves:@me";
+        let id = db.create_stream("s", q, None, 60, None).unwrap();
+        db.upsert_items(id, &[pr_item("u-closed", "CLOSED", false, "o/r")]).unwrap();
+        // involves:@me はローカル判定不能 → そちらに合致している可能性があるので何も外さない
+        assert_eq!(db.prune_stream_links(id, q).unwrap(), 0);
     }
 
     #[test]

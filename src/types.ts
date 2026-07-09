@@ -105,6 +105,12 @@ export type ItemAction =
   | { type: "editLabels"; add: string[]; remove: string[] }
   | { type: "assignMe"; remove: boolean };
 
+export type UpdateInfo = {
+  current: string;
+  latest: string;
+  url: string;
+};
+
 export type GraphPr = { number: number; title: string; url: string };
 export type GraphBranch = {
   name: string;

@@ -43,9 +43,14 @@ async fn tick(app: &AppHandle) -> Result<(), String> {
 /// Stream を 1 回ポーリングして新着数を返す。notify=true なら新着を OS 通知する
 /// (初回ポーリングはバックフィルなので通知しない)。
 pub async fn poll_stream(app: &AppHandle, stream: &DueStream, notify: bool) -> Result<usize, String> {
+    // query は改行区切りで複数の検索クエリを持てる(結果を OR マージ、URL で重複排除)
     let items = {
         let gh = app.state::<AppState>();
-        github::search_items(&gh, &stream.query, MAX_FETCH).await?
+        let mut all = Vec::new();
+        for line in stream.query.lines().map(str::trim).filter(|l| !l.is_empty()) {
+            all.extend(github::search_items(&gh, line, MAX_FETCH).await?);
+        }
+        all
     };
 
     let db = app.state::<Db>();

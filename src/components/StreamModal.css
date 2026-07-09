@@ -35,6 +35,63 @@
   color: #fff;
 }
 
+.query-set-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.query-set-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 4px 1px 2px;
+}
+
+.query-set-chip.active {
+  border-color: var(--accent);
+}
+
+.query-set-chip-select {
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.query-set-chip.active .query-set-chip-select {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.query-manual-textarea {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.query-manual-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.query-merge-count {
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+
 .query-builder {
   display: flex;
   flex-direction: column;

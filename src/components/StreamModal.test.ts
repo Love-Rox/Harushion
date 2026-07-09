@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildQuery, parseQuery } from "./StreamModal";
+import { buildQuery, joinQuerySets, parseQuery, splitQuerySets } from "./StreamModal";
 
 const base = () => parseQuery("");
 
@@ -67,5 +67,29 @@ describe("parseQuery", () => {
     // rest(未知トークン)も含めて保持されている
     expect(state.rest).toBe("in:title");
     expect(state.excludeDraft).toBe(true);
+  });
+});
+
+describe("splitQuerySets", () => {
+  it("ignores empty lines and trims each line", () => {
+    expect(splitQuerySets("involves:@me\n\n  repo:o/r is:pr  \n")).toEqual([
+      "involves:@me",
+      "repo:o/r is:pr",
+    ]);
+  });
+
+  it("returns an empty array for a blank string", () => {
+    expect(splitQuerySets("   \n\n")).toEqual([]);
+  });
+});
+
+describe("joinQuerySets", () => {
+  it("round-trips with splitQuerySets", () => {
+    const sets = ["involves:@me", "repo:o/r is:pr"];
+    expect(splitQuerySets(joinQuerySets(sets))).toEqual(sets);
+  });
+
+  it("trims each set and drops empty ones when joining", () => {
+    expect(joinQuerySets(["  involves:@me  ", "", "  "])).toBe("involves:@me");
   });
 });

@@ -180,6 +180,22 @@ export function buildQuery(state: BuilderState & { rest: string }): string {
   return tokens.join(" ");
 }
 
+/** Splits a saved `query` string into its condition-set lines, trimming each and dropping empty ones. */
+export function splitQuerySets(raw: string): string[] {
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+/** Joins condition-set lines back into a saved `query` string, trimming each and dropping empty ones. */
+export function joinQuerySets(sets: string[]): string {
+  return sets
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .join("\n");
+}
+
 type QueryFormState = BuilderState & { rest: string };
 
 const DEFAULT_FORM_STATE: QueryFormState = {
@@ -208,14 +224,23 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
   const overlayMouseDownRef = useRef(false);
 
   const [mode, setMode] = useState<"builder" | "manual">("builder");
-  const [builder, setBuilder] = useState<QueryFormState>(() =>
-    stream ? parseQuery(stream.query) : { ...DEFAULT_FORM_STATE, sort: "updated-desc" },
-  );
-  const [query, setQuery] = useState(() => buildQuery(builder));
+  // 条件セット(query の各行)。 通常操作では常に非空だが、ビルダーで
+  // 選択中セットを空にした場合のみ一時的に空文字を保持しうる。
+  const [querySets, setQuerySets] = useState<string[]>(() => {
+    if (!stream) return [buildQuery({ ...DEFAULT_FORM_STATE, sort: "updated-desc" })];
+    const sets = splitQuerySets(stream.query);
+    return sets.length > 0 ? sets : [""];
+  });
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [builder, setBuilder] = useState<QueryFormState>(() => parseQuery(querySets[0]));
+  const [manualText, setManualText] = useState(() => joinQuerySets(querySets));
   const [repoInput, setRepoInput] = useState("");
   const [repoError, setRepoError] = useState<string | null>(null);
   const [labelInput, setLabelInput] = useState("");
 
+  // 保存対象のクエリ文字列。 手動タブでは manualText、ビルダータブでは
+  // querySets を正とし、いずれも空行を除いて trim・結合する。
+  const query = mode === "manual" ? joinQuerySets(splitQuerySets(manualText)) : joinQuerySets(querySets);
   const nameValid = name.trim().length > 0;
   const queryValid = query.trim().length > 0;
   const intervalValid = intervalSec >= 60;
@@ -223,9 +248,34 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
   const updateBuilder = (patch: Partial<QueryFormState>) => {
     setBuilder((prev) => {
       const next = { ...prev, ...patch };
-      setQuery(buildQuery(next));
+      setQuerySets(querySets.map((s, i) => (i === selectedIndex ? buildQuery(next) : s)));
       return next;
     });
+  };
+
+  const selectSet = (index: number) => {
+    setSelectedIndex(index);
+    setBuilder(parseQuery(querySets[index]));
+  };
+
+  const addSet = () => {
+    const line = buildQuery({ ...DEFAULT_FORM_STATE, sort: "updated-desc" });
+    setQuerySets([...querySets, line]);
+    setSelectedIndex(querySets.length);
+    setBuilder({ ...DEFAULT_FORM_STATE, sort: "updated-desc" });
+  };
+
+  const removeSet = (index: number) => {
+    if (querySets.length <= 1) return;
+    const next = querySets.filter((_, i) => i !== index);
+    setQuerySets(next);
+    if (index === selectedIndex) {
+      const nextIndex = Math.min(selectedIndex, next.length - 1);
+      setSelectedIndex(nextIndex);
+      setBuilder(parseQuery(next[nextIndex]));
+    } else if (index < selectedIndex) {
+      setSelectedIndex(selectedIndex - 1);
+    }
   };
 
   const toggleRelation = (relation: BuilderRelation) => {
@@ -265,13 +315,17 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
   };
 
   const switchToBuilder = () => {
-    const parsed = parseQuery(query);
-    setBuilder(parsed);
-    setQuery(buildQuery(parsed));
+    const sets = splitQuerySets(manualText);
+    const nextSets = sets.length > 0 ? sets : [""];
+    const nextIndex = Math.min(selectedIndex, nextSets.length - 1);
+    setQuerySets(nextSets);
+    setSelectedIndex(nextIndex);
+    setBuilder(parseQuery(nextSets[nextIndex]));
     setMode("builder");
   };
 
   const switchToManual = () => {
+    setManualText(joinQuerySets(querySets));
     setMode("manual");
   };
 
@@ -387,6 +441,29 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                   手動
                 </button>
               </div>
+            </div>
+
+            <div className="query-set-chip-row">
+              {querySets.map((_, i) => (
+                <span key={i} className={`query-set-chip${i === selectedIndex ? " active" : ""}`}>
+                  <button type="button" className="query-set-chip-select" onClick={() => selectSet(i)}>
+                    条件{i + 1}
+                  </button>
+                  {querySets.length > 1 && (
+                    <button
+                      type="button"
+                      className="chip-remove"
+                      onClick={() => removeSet(i)}
+                      aria-label={`条件${i + 1} を削除`}
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+              <button type="button" className="btn btn-small query-set-add" onClick={addSet}>
+                + 条件を追加
+              </button>
             </div>
 
             {mode === "builder" ? (
@@ -567,15 +644,18 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                   />
                 </label>
 
-                <div className="query-preview mono-input">{query || "(クエリなし)"}</div>
+                <div className="query-preview mono-input">{buildQuery(builder) || "(クエリなし)"}</div>
+                {querySets.length > 1 && (
+                  <div className="query-merge-count">マージ結果: {querySets.length} 件の条件セット</div>
+                )}
               </div>
             ) : (
-              <input
-                type="text"
-                className="mono-input"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="involves:@me sort:updated-desc"
+              <textarea
+                className="mono-input query-manual-textarea"
+                rows={3}
+                value={manualText}
+                onChange={(e) => setManualText(e.target.value)}
+                placeholder={"involves:@me sort:updated-desc\nrepo:org/name is:pr"}
                 {...NO_TEXT_AUTOFILL}
               />
             )}

@@ -33,6 +33,30 @@ impl AppState {
         *self.token.lock().await = None;
     }
 
+    /// GitHub REST API への GET(更新チェック等の GraphQL 非対応エンドポイント用)
+    pub async fn rest_get(&self, path: &str) -> Result<Value, String> {
+        let token = self.token().await?;
+        let resp = self
+            .http
+            .get(format!("https://api.github.com/{path}"))
+            .bearer_auth(&token)
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|e| format!("GitHub API への接続に失敗しました: {e}"))?;
+        let status = resp.status();
+        let body: Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("GitHub API のレスポンスを解釈できませんでした: {e}"))?;
+        if !status.is_success() {
+            let message = body["message"].as_str().unwrap_or("unknown error");
+            return Err(format!("GitHub API エラー ({status}): {message}"));
+        }
+        Ok(body)
+    }
+
     pub async fn graphql(&self, query: &str, variables: Value) -> Result<Value, String> {
         // 401 でトークンを破棄して一度だけ再取得する(gh 側で再ログインされた場合に追従)
         for attempt in 0..2 {

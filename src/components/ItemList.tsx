@@ -70,7 +70,7 @@ export function ItemList({
       <header className="header">
         <div className="header-title">
           <h1 className="app-title">{stream ? stream.name : "Harushion"}</h1>
-          {stream && <code className="query">{stream.query}</code>}
+          {stream && <code className="query">{stream.query.replace(/\n/g, " | ")}</code>}
         </div>
         <div className="header-right">
           {stream && (

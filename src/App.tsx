@@ -2,7 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { BranchGraph, Item, ItemAction, ItemDetail, LabelInfo, Stream, Viewer } from "./types";
+import type {
+  BranchGraph,
+  Item,
+  ItemAction,
+  ItemDetail,
+  LabelInfo,
+  Stream,
+  UpdateInfo,
+  Viewer,
+} from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { StreamModal } from "./components/StreamModal";
 import type {
@@ -37,6 +46,7 @@ function App() {
   const [itemsLoading, setItemsLoading] = useState(false);
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingStream, setEditingStream] = useState<Stream | null>(null);
   const [folderColors, setFolderColors] = useState<Record<string, string>>({});
@@ -167,6 +177,15 @@ function App() {
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, [loadStreams, loadItems]);
+
+  useEffect(() => {
+    const unlistenPromise = listen<UpdateInfo>("update-available", (event) => {
+      setUpdateInfo(event.payload);
+    });
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   // Selected stream changed: clear detail selection.
   useEffect(() => {
@@ -410,6 +429,24 @@ function App() {
 
   return (
     <div className="app">
+      {updateInfo && (
+        <div className="update-banner">
+          <span>
+            新しいバージョン v{updateInfo.latest} が利用可能です(現在 v{updateInfo.current})。
+            <code>brew upgrade --cask harushion</code> で更新できます。
+          </span>
+          <button className="btn btn-small" onClick={() => handleOpenUrl(updateInfo.url)}>
+            リリースを開く
+          </button>
+          <button
+            className="update-banner-close"
+            aria-label="閉じる"
+            onClick={() => setUpdateInfo(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className="app-body">
         <Sidebar
           streams={streams}
