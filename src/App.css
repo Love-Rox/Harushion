@@ -1,0 +1,205 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f9;
+  --bg-panel: #ffffff;
+  --fg: #1c2128;
+  --fg-muted: #59636e;
+  --border: #d9dee3;
+  --accent: #0969da;
+  --open: #1a7f37;
+  --merged: #8250df;
+  --closed: #cf222e;
+  --draft: #59636e;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+  font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --bg-panel: #161b22;
+    --fg: #e6edf3;
+    --fg-muted: #8d96a0;
+    --border: #30363d;
+    --accent: #4493f8;
+    --open: #3fb950;
+    --merged: #ab7df8;
+    --closed: #f85149;
+    --draft: #8d96a0;
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.query {
+  color: var(--fg-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.reload {
+  background: var(--bg-panel);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.reload:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.reload:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.viewer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-muted);
+}
+
+.avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--fg-muted);
+}
+
+.error {
+  margin: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--closed);
+  border-radius: 8px;
+  color: var(--closed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.item:hover {
+  background: var(--bg-panel);
+}
+
+.kind {
+  flex-shrink: 0;
+  width: 42px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 2px 0;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+}
+
+.item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.item-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-meta {
+  color: var(--fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.state {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.state-open {
+  color: var(--open);
+}
+
+.state-merged {
+  color: var(--merged);
+}
+
+.state-closed {
+  color: var(--closed);
+}
+
+.state-draft {
+  color: var(--draft);
+}
