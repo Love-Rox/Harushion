@@ -64,7 +64,9 @@ export function Sidebar({
   const [colorPopoverFolder, setColorPopoverFolder] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
-  const [draggedStream, setDraggedStream] = useState<{ id: number; folder: string | null } | null>(null);
+  const [draggedStream, setDraggedStream] = useState<{ id: number; folder: string | null } | null>(
+    null,
+  );
   const [dropIndicator, setDropIndicator] = useState<DropIndicator>(null);
   const [draggedFolder, setDraggedFolder] = useState<string | null>(null);
   const [folderDropIndicator, setFolderDropIndicator] = useState<FolderDropIndicator>(null);
@@ -103,11 +105,17 @@ export function Sidebar({
     const unknown = [...byFolder.keys()]
       .filter((folder) => !folderOrder.includes(folder))
       .sort((a, b) => a.localeCompare(b));
-    const groups: [string, Stream[]][] = [...known, ...unknown].map((folder) => [folder, byFolder.get(folder)!]);
+    const groups: [string, Stream[]][] = [...known, ...unknown].map((folder) => [
+      folder,
+      byFolder.get(folder)!,
+    ]);
     return { root, groups };
   }, [streams, folderOrder]);
 
-  const buildGlobalStreamIds = (sectionFolder: string | null, newSectionOrder: Stream[]): number[] => {
+  const buildGlobalStreamIds = (
+    sectionFolder: string | null,
+    newSectionOrder: Stream[],
+  ): number[] => {
     const rootIds = (sectionFolder === null ? newSectionOrder : root).map((s) => s.id);
     const folderIds = groups.flatMap(([folder, folderStreams]) =>
       (folder === sectionFolder ? newSectionOrder : folderStreams).map((s) => s.id),
@@ -126,9 +134,14 @@ export function Sidebar({
     setDropIndicator(null);
   };
 
-  const handleStreamDragOver = (e: DragEvent<HTMLDivElement>, target: Stream, sectionFolder: string | null) => {
+  const handleStreamDragOver = (
+    e: DragEvent<HTMLDivElement>,
+    target: Stream,
+    sectionFolder: string | null,
+  ) => {
     if (!e.dataTransfer.types.includes(STREAM_DND_TYPE)) return;
-    if (!draggedStream || draggedStream.folder !== sectionFolder || draggedStream.id === target.id) return;
+    if (!draggedStream || draggedStream.folder !== sectionFolder || draggedStream.id === target.id)
+      return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     const rect = e.currentTarget.getBoundingClientRect();
@@ -147,14 +160,19 @@ export function Sidebar({
     const indicator = dropIndicator;
     setDraggedStream(null);
     setDropIndicator(null);
-    if (!dragged || dragged.folder !== sectionFolder || !indicator || indicator.id !== target.id) return;
+    if (!dragged || dragged.folder !== sectionFolder || !indicator || indicator.id !== target.id)
+      return;
     const draggedObj = sectionStreams.find((s) => s.id === dragged.id);
     if (!draggedObj) return;
     const withoutDragged = sectionStreams.filter((s) => s.id !== dragged.id);
     const targetIndex = withoutDragged.findIndex((s) => s.id === target.id);
     if (targetIndex === -1) return;
     const insertAt = indicator.position === "above" ? targetIndex : targetIndex + 1;
-    const newOrder = [...withoutDragged.slice(0, insertAt), draggedObj, ...withoutDragged.slice(insertAt)];
+    const newOrder = [
+      ...withoutDragged.slice(0, insertAt),
+      draggedObj,
+      ...withoutDragged.slice(insertAt),
+    ];
     onReorderStreams(buildGlobalStreamIds(sectionFolder, newOrder));
   };
 
@@ -191,7 +209,11 @@ export function Sidebar({
     const targetIndex = withoutDragged.indexOf(folder);
     if (targetIndex === -1) return;
     const insertAt = indicator.position === "above" ? targetIndex : targetIndex + 1;
-    const newOrder = [...withoutDragged.slice(0, insertAt), dragged, ...withoutDragged.slice(insertAt)];
+    const newOrder = [
+      ...withoutDragged.slice(0, insertAt),
+      dragged,
+      ...withoutDragged.slice(insertAt),
+    ];
     onReorderFolders(newOrder);
   };
 
@@ -222,7 +244,9 @@ export function Sidebar({
         onDrop={(e) => handleStreamDrop(e, stream, sectionFolder, sectionStreams)}
         onClick={() => onSelect(stream.id)}
       >
-        {stream.color && <span className="stream-color-chip" style={{ backgroundColor: `#${stream.color}` }} />}
+        {stream.color && (
+          <span className="stream-color-chip" style={{ backgroundColor: `#${stream.color}` }} />
+        )}
         <span className="stream-name">{stream.name}</span>
         {stream.unreadCount > 0 && <span className="stream-badge">{stream.unreadCount}</span>}
         <button
@@ -286,7 +310,11 @@ export function Sidebar({
                 onDrop={(e) => handleFolderDrop(e, folder)}
               >
                 <button className="folder-header" onClick={() => toggleFolder(folder)}>
-                  <span className={`folder-arrow${collapsedFolders.has(folder) ? " collapsed" : ""}`}>▾</span>
+                  <span
+                    className={`folder-arrow${collapsedFolders.has(folder) ? " collapsed" : ""}`}
+                  >
+                    ▾
+                  </span>
                   {folder}
                 </button>
                 <button
@@ -381,7 +409,12 @@ export function Sidebar({
               >
                 {adding ? "追加中…" : "追加"}
               </button>
-              <button type="button" className="btn btn-small" onClick={closeAddForm} disabled={adding}>
+              <button
+                type="button"
+                className="btn btn-small"
+                onClick={closeAddForm}
+                disabled={adding}
+              >
                 キャンセル
               </button>
             </div>

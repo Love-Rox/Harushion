@@ -5,7 +5,11 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { BranchGraph, Item, ItemAction, ItemDetail, LabelInfo, Stream, Viewer } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { StreamModal } from "./components/StreamModal";
-import type { StreamCreateInput, StreamDuplicateInput, StreamUpdateInput } from "./components/StreamModal";
+import type {
+  StreamCreateInput,
+  StreamDuplicateInput,
+  StreamUpdateInput,
+} from "./components/StreamModal";
 import { ItemList } from "./components/ItemList";
 import { DetailPane } from "./components/DetailPane";
 import { GraphView } from "./components/GraphView";

@@ -258,22 +258,40 @@ export function DetailPane({
           confirmClose ? (
             <span className="delete-confirm" key="close-confirm">
               <span className="delete-confirm-text">クローズしますか?</span>
-              <button className="btn btn-danger" disabled={actionPending} onClick={() => void handleClose()}>
+              <button
+                className="btn btn-danger"
+                disabled={actionPending}
+                onClick={() => void handleClose()}
+              >
                 {label("実行", "close")}
               </button>
-              <button className="btn" disabled={actionPending} onClick={() => setConfirmClose(false)}>
+              <button
+                className="btn"
+                disabled={actionPending}
+                onClick={() => setConfirmClose(false)}
+              >
                 キャンセル
               </button>
             </span>
           ) : (
-            <button key="close" className="btn" disabled={actionPending} onClick={() => setConfirmClose(true)}>
+            <button
+              key="close"
+              className="btn"
+              disabled={actionPending}
+              onClick={() => setConfirmClose(true)}
+            >
               クローズ
             </button>
           ),
         );
       } else {
         buttons.push(
-          <button key="reopen" className="btn" disabled={actionPending} onClick={() => void handleReopen()}>
+          <button
+            key="reopen"
+            className="btn"
+            disabled={actionPending}
+            onClick={() => void handleReopen()}
+          >
             {label("再オープン", "reopen")}
           </button>,
         );
@@ -316,10 +334,18 @@ export function DetailPane({
               {confirmMerge ? (
                 <span className="delete-confirm">
                   <span className="delete-confirm-text">マージする?</span>
-                  <button className="btn btn-primary" disabled={actionPending} onClick={() => void handleMerge()}>
+                  <button
+                    className="btn btn-primary"
+                    disabled={actionPending}
+                    onClick={() => void handleMerge()}
+                  >
                     {label("実行", "merge")}
                   </button>
-                  <button className="btn" disabled={actionPending} onClick={() => setConfirmMerge(false)}>
+                  <button
+                    className="btn"
+                    disabled={actionPending}
+                    onClick={() => setConfirmMerge(false)}
+                  >
                     キャンセル
                   </button>
                 </span>
@@ -344,7 +370,11 @@ export function DetailPane({
                 onChange={(e) => setReviewBody(e.target.value)}
                 disabled={actionPending}
               />
-              <button className="btn" disabled={actionPending} onClick={() => void handleReview("approve")}>
+              <button
+                className="btn"
+                disabled={actionPending}
+                onClick={() => void handleReview("approve")}
+              >
                 {label("Approve", "review:approve")}
               </button>
               <button
@@ -355,7 +385,11 @@ export function DetailPane({
               >
                 {label("変更をリクエスト", "review:requestChanges")}
               </button>
-              <button className="btn" disabled={actionPending} onClick={() => void handleReview("comment")}>
+              <button
+                className="btn"
+                disabled={actionPending}
+                onClick={() => void handleReview("comment")}
+              >
                 {label("コメント", "review:comment")}
               </button>
             </span>,
@@ -383,7 +417,12 @@ export function DetailPane({
         }
       } else if (detail.state === "CLOSED") {
         buttons.push(
-          <button key="reopen" className="btn" disabled={actionPending} onClick={() => void handleReopen()}>
+          <button
+            key="reopen"
+            className="btn"
+            disabled={actionPending}
+            onClick={() => void handleReopen()}
+          >
             {label("再オープン", "reopen")}
           </button>,
         );
@@ -415,8 +454,15 @@ export function DetailPane({
             {detail.title}
           </button>
           <div className="detail-header-meta">
-            <StateBadge kind={detail.kind} state={detail.state} isDraft={detail.isDraft} size={14} />
-            {detail.authorAvatar && <img src={detail.authorAvatar} className="avatar avatar-small" alt="" />}
+            <StateBadge
+              kind={detail.kind}
+              state={detail.state}
+              isDraft={detail.isDraft}
+              size={14}
+            />
+            {detail.authorAvatar && (
+              <img src={detail.authorAvatar} className="avatar avatar-small" alt="" />
+            )}
             {detail.author && <span className="detail-author">{detail.author}</span>}
             <span className="detail-time">
               作成 {relativeTime(detail.createdAt)} · 更新 {relativeTime(detail.updatedAt)}
@@ -429,7 +475,12 @@ export function DetailPane({
           <div className="detail-sticky">
             {scrolled && (
               <div className="detail-sticky-title">
-                <StateBadge kind={detail.kind} state={detail.state} isDraft={detail.isDraft} size={14} />
+                <StateBadge
+                  kind={detail.kind}
+                  state={detail.state}
+                  isDraft={detail.isDraft}
+                  size={14}
+                />
                 <span className="detail-sticky-repo">
                   {detail.repo}#{detail.number}
                 </span>
@@ -448,10 +499,14 @@ export function DetailPane({
                       <span className="pr-deletions">-{detail.deletions}</span>
                     </span>
                     {detail.mergeable === "CONFLICTING" && (
-                      <span className="mergeable-badge warn">{mergeableLabel(detail.mergeable)}</span>
+                      <span className="mergeable-badge warn">
+                        {mergeableLabel(detail.mergeable)}
+                      </span>
                     )}
                     {detail.reviewDecision && (
-                      <span className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}>
+                      <span
+                        className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}
+                      >
                         {reviewDecisionLabel(detail.reviewDecision)}
                       </span>
                     )}
@@ -489,12 +544,16 @@ export function DetailPane({
                   <span className="pr-changed-files">{detail.changedFiles} files</span>
                 </span>
                 {detail.mergeable && (
-                  <span className={`mergeable-badge${detail.mergeable === "CONFLICTING" ? " warn" : ""}`}>
+                  <span
+                    className={`mergeable-badge${detail.mergeable === "CONFLICTING" ? " warn" : ""}`}
+                  >
                     {mergeableLabel(detail.mergeable)}
                   </span>
                 )}
                 {detail.reviewDecision && (
-                  <span className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}>
+                  <span
+                    className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}
+                  >
                     {reviewDecisionLabel(detail.reviewDecision)}
                   </span>
                 )}
@@ -505,58 +564,64 @@ export function DetailPane({
           <div className="prop-row">
             <span className="prop-label">ラベル</span>
             <div className="prop-value labels-row">
-          {detail.labels.map((l) => (
-            <span
-              key={l.name}
-              className="label-chip"
-              style={{ background: `#${l.color}`, color: labelTextColor(l.color) }}
-            >
-              {l.name}
-            </span>
-          ))}
-          <button className="label-edit-btn" onClick={() => void openLabelsEditor()}>
-            編集
-          </button>
-          {labelsOpen && (
-            <div className="popover labels-popover">
-              {labelsLoading && <p className="popover-loading">読み込み中…</p>}
-              {labelsError && <p className="popover-error">{labelsError}</p>}
-              {!labelsLoading && repoLabelsList && (
-                <>
-                  <div className="labels-popover-list">
-                    {repoLabelsList.map((l) => (
-                      <label key={l.name} className="labels-popover-item">
-                        <input
-                          type="checkbox"
-                          checked={checkedLabels.has(l.name)}
-                          onChange={() => toggleCheckedLabel(l.name)}
-                        />
-                        <span
-                          className="label-chip label-chip-small"
-                          style={{ background: `#${l.color}`, color: labelTextColor(l.color) }}
+              {detail.labels.map((l) => (
+                <span
+                  key={l.name}
+                  className="label-chip"
+                  style={{ background: `#${l.color}`, color: labelTextColor(l.color) }}
+                >
+                  {l.name}
+                </span>
+              ))}
+              <button className="label-edit-btn" onClick={() => void openLabelsEditor()}>
+                編集
+              </button>
+              {labelsOpen && (
+                <div className="popover labels-popover">
+                  {labelsLoading && <p className="popover-loading">読み込み中…</p>}
+                  {labelsError && <p className="popover-error">{labelsError}</p>}
+                  {!labelsLoading && repoLabelsList && (
+                    <>
+                      <div className="labels-popover-list">
+                        {repoLabelsList.map((l) => (
+                          <label key={l.name} className="labels-popover-item">
+                            <input
+                              type="checkbox"
+                              checked={checkedLabels.has(l.name)}
+                              onChange={() => toggleCheckedLabel(l.name)}
+                            />
+                            <span
+                              className="label-chip label-chip-small"
+                              style={{ background: `#${l.color}`, color: labelTextColor(l.color) }}
+                            >
+                              {l.name}
+                            </span>
+                          </label>
+                        ))}
+                        {repoLabelsList.length === 0 && (
+                          <p className="popover-empty">ラベルがありません</p>
+                        )}
+                      </div>
+                      <div className="popover-actions">
+                        <button
+                          className="btn"
+                          onClick={() => setLabelsOpen(false)}
+                          disabled={actionPending}
                         >
-                          {l.name}
-                        </span>
-                      </label>
-                    ))}
-                    {repoLabelsList.length === 0 && <p className="popover-empty">ラベルがありません</p>}
-                  </div>
-                  <div className="popover-actions">
-                    <button className="btn" onClick={() => setLabelsOpen(false)} disabled={actionPending}>
-                      キャンセル
-                    </button>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => void applyLabels()}
-                      disabled={actionPending}
-                    >
-                      {label("適用", "editLabels")}
-                    </button>
-                  </div>
-                </>
+                          キャンセル
+                        </button>
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => void applyLabels()}
+                          disabled={actionPending}
+                        >
+                          {label("適用", "editLabels")}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
-            </div>
-          )}
             </div>
           </div>
 
@@ -570,8 +635,14 @@ export function DetailPane({
                 </span>
               ))}
               {viewer && (
-                <button className="btn btn-small" onClick={handleAssignToggle} disabled={actionPending}>
-                  {isAssignedToMe ? label("アサイン解除", "assignMe") : label("自分をアサイン", "assignMe")}
+                <button
+                  className="btn btn-small"
+                  onClick={handleAssignToggle}
+                  disabled={actionPending}
+                >
+                  {isAssignedToMe
+                    ? label("アサイン解除", "assignMe")
+                    : label("自分をアサイン", "assignMe")}
                 </button>
               )}
             </div>
@@ -627,7 +698,11 @@ export function DetailPane({
 
         <section className="detail-body-section">
           {detail.bodyHtml ? (
-            <div className="md" onClick={handleMdClick} dangerouslySetInnerHTML={{ __html: detail.bodyHtml }} />
+            <div
+              className="md"
+              onClick={handleMdClick}
+              dangerouslySetInnerHTML={{ __html: detail.bodyHtml }}
+            />
           ) : (
             <p className="fg-muted">本文なし</p>
           )}
@@ -645,11 +720,17 @@ export function DetailPane({
           {detail.comments.map((c, i) => (
             <article className="comment-card" key={i}>
               <div className="comment-header">
-                {c.authorAvatar && <img src={c.authorAvatar} className="avatar avatar-small" alt="" />}
+                {c.authorAvatar && (
+                  <img src={c.authorAvatar} className="avatar avatar-small" alt="" />
+                )}
                 <span className="comment-author">{c.author ?? "unknown"}</span>
                 <span className="comment-time">{relativeTime(c.createdAt)}</span>
               </div>
-              <div className="md comment-body" onClick={handleMdClick} dangerouslySetInnerHTML={{ __html: c.bodyHtml }} />
+              <div
+                className="md comment-body"
+                onClick={handleMdClick}
+                dangerouslySetInnerHTML={{ __html: c.bodyHtml }}
+              />
             </article>
           ))}
         </section>

@@ -1,12 +1,15 @@
 {
   "name": "gitviewer",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
+    "dev": "vp dev",
+    "build": "tsc -b && vp build",
+    "preview": "vp preview",
+    "test": "vp test run",
+    "lint": "vp lint",
+    "fmt": "vp fmt",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -19,8 +22,12 @@
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^4.6.0",
+    "@vitejs/plugin-react": "^6.0.3",
     "typescript": "^7.0.2",
-    "vite": "^7.0.4"
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.4",
+    "vite-plus": "0.2.4"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.4"
   }
 }

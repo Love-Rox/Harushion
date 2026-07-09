@@ -1,3 +1,5 @@
+// "vite" は package.json で @voidzero-dev/vite-plus-core にエイリアスされている。
+// plugin-react の型と同一モジュールから defineConfig を取るため "vite-plus" ではなくこちらを使う。
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 

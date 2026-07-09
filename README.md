@@ -27,20 +27,29 @@ npm run tauri dev
 ### テスト
 
 ```sh
+# フロントの単体テスト (Vitest)
+npm run test
+
+# リント / フォーマット (Oxlint / Oxfmt)
+npm run lint
+npm run fmt
+
+# 型チェック + フロントビルド (TS7 + Vite+/Rolldown)
+npm run build
+
 # Rust 統合テスト(gh の実認証とネットワークを使用)
 cd src-tauri && cargo test -- --ignored
-
-# 型チェック + フロントビルド
-npm run build
 ```
+
+> ツールチェーンは [Vite+](https://github.com/voidzero-dev/vite-plus)(`vp`)に統一。`.npmrc` の `legacy-peer-deps` は vite-plus 0.2.x が TypeScript 7 を peer range に含めていないための暫定措置。
 
 ## ロードマップ
 
-| フェーズ | 内容 | 状態 |
-|---|---|---|
-| M0 | 基盤: gh 認証 + 固定クエリで一覧表示 | ✅ |
-| M1 | Stream CRUD・ポーリング・SQLite・未読管理・通知 | ✅ |
-| M2 | 詳細ペインと GitHub 操作(gh でできることを網羅) | ✅ |
-| M3 | アプリ内ブラウザ統合(WebviewWindow 方式) | ✅ |
-| M4 | ブランチグラフ | ✅ |
-| M5 | 配布(mac 署名 → Windows/Linux) | 予定 |
+| フェーズ | 内容                                            | 状態 |
+| -------- | ----------------------------------------------- | ---- |
+| M0       | 基盤: gh 認証 + 固定クエリで一覧表示            | ✅   |
+| M1       | Stream CRUD・ポーリング・SQLite・未読管理・通知 | ✅   |
+| M2       | 詳細ペインと GitHub 操作(gh でできることを網羅) | ✅   |
+| M3       | アプリ内ブラウザ統合(WebviewWindow 方式)        | ✅   |
+| M4       | ブランチグラフ                                  | ✅   |
+| M5       | 配布(mac 署名 → Windows/Linux)                  | 予定 |

@@ -385,7 +385,9 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                     <span className="field-label">種別</span>
                     <select
                       value={builder.kind}
-                      onChange={(e) => updateBuilder({ kind: e.target.value as BuilderState["kind"] })}
+                      onChange={(e) =>
+                        updateBuilder({ kind: e.target.value as BuilderState["kind"] })
+                      }
                     >
                       <option value="">すべて</option>
                       <option value="issue">Issue</option>
@@ -397,7 +399,9 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                     <span className="field-label">状態</span>
                     <select
                       value={builder.status}
-                      onChange={(e) => updateBuilder({ status: e.target.value as BuilderState["status"] })}
+                      onChange={(e) =>
+                        updateBuilder({ status: e.target.value as BuilderState["status"] })
+                      }
                     >
                       <option value="">すべて</option>
                       <option value="open">Open</option>
@@ -529,7 +533,9 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                   <span className="field-label">並び順</span>
                   <select
                     value={builder.sort}
-                    onChange={(e) => updateBuilder({ sort: e.target.value as BuilderState["sort"] })}
+                    onChange={(e) =>
+                      updateBuilder({ sort: e.target.value as BuilderState["sort"] })
+                    }
                   >
                     <option value="updated-desc">更新が新しい順</option>
                     <option value="created-desc">作成が新しい順</option>
@@ -621,7 +627,11 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
 
           {stream && (
             <label className="field field-row">
-              <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+              />
               <span className="field-label">有効</span>
             </label>
           )}
@@ -638,7 +648,9 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                 type="button"
                 className="btn duplicate-btn"
                 onClick={() => void handleDuplicate()}
-                disabled={saving || deleting || duplicating || !nameValid || !queryValid || !intervalValid}
+                disabled={
+                  saving || deleting || duplicating || !nameValid || !queryValid || !intervalValid
+                }
               >
                 {duplicating ? "複製中…" : "複製"}
               </button>

@@ -43,7 +43,10 @@ export function GraphView({ repo, data, loading, error, onRefresh, onOpenInApp }
           <button className="btn" onClick={onRefresh} disabled={loading}>
             {loading ? "更新中…" : "更新"}
           </button>
-          <button className="btn btn-primary" onClick={() => onOpenInApp(`https://github.com/${repo}`)}>
+          <button
+            className="btn btn-primary"
+            onClick={() => onOpenInApp(`https://github.com/${repo}`)}
+          >
             GitHubで開く
           </button>
         </div>
@@ -92,7 +95,13 @@ function branchDiffLabel(branch: GraphBranch): string {
   return parts.join(" ");
 }
 
-function BranchStrip({ branches, onOpenInApp }: { branches: GraphBranch[]; onOpenInApp: (url: string) => void }) {
+function BranchStrip({
+  branches,
+  onOpenInApp,
+}: {
+  branches: GraphBranch[];
+  onOpenInApp: (url: string) => void;
+}) {
   return (
     <div className="branch-strip">
       {branches.map((b) => (

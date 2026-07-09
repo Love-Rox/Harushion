@@ -83,7 +83,9 @@ export function ItemList({
           </div>
         )}
         {!error && stream && loading && items.length === 0 && <p className="empty">読み込み中…</p>}
-        {!error && stream && !loading && items.length === 0 && <p className="empty">アイテムがありません</p>}
+        {!error && stream && !loading && items.length === 0 && (
+          <p className="empty">アイテムがありません</p>
+        )}
         {stream &&
           items.map((item) => {
             const selected = item.url === selectedItemUrl;
@@ -100,7 +102,13 @@ export function ItemList({
                   <span className="read-dot" />
                 </button>
                 <button className="item-open" onClick={() => onItemSelect(item)} title={item.title}>
-                  <StateBadge kind={item.kind} state={item.state} isDraft={item.isDraft} size={16} layout="column" />
+                  <StateBadge
+                    kind={item.kind}
+                    state={item.state}
+                    isDraft={item.isDraft}
+                    size={16}
+                    layout="column"
+                  />
                   <span className="item-main">
                     <span className="item-title">{item.title}</span>
                     <span className="item-meta">

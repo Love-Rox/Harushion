@@ -31,7 +31,8 @@ type Resolved = { icon: IconPaths; label: string; color: string };
 export function resolveState(kind: "issue" | "pr", state: string, isDraft: boolean): Resolved {
   if (kind === "pr") {
     if (state === "MERGED") return { icon: ICONS.merge, label: "Merged", color: "state-merged" };
-    if (state === "CLOSED") return { icon: ICONS.pullRequestClosed, label: "Closed", color: "state-closed" };
+    if (state === "CLOSED")
+      return { icon: ICONS.pullRequestClosed, label: "Closed", color: "state-closed" };
     if (isDraft) return { icon: ICONS.pullRequestDraft, label: "Draft", color: "state-draft" };
     return { icon: ICONS.pullRequest, label: "Open", color: "state-open" };
   }
