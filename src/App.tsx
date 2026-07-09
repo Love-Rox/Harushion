@@ -169,6 +169,16 @@ function App() {
     }
   }, []);
 
+  const toggleEpicMembership = async (epicId: number, itemUrl: string, isMember: boolean) => {
+    await invoke<void>(isMember ? "remove_epic_item" : "add_epic_item", { epicId, itemUrl });
+    const jobs: Promise<unknown>[] = [loadEpics()];
+    if (selectedItem?.url === itemUrl) jobs.push(loadItemEpicIds(itemUrl));
+    if (view.type === "epic") jobs.push(loadEpicItems(view.epicId));
+    // 行の epicIds チップを最新化
+    if (selectedStreamId != null) jobs.push(loadItems(selectedStreamId, unreadOnly));
+    await Promise.all(jobs);
+  };
+
   const loadItemEpicIds = useCallback(async (url: string) => {
     try {
       const result = await invoke<number[]>("item_epic_ids", { itemUrl: url });
@@ -720,6 +730,8 @@ function App() {
               onCopyUrl={handleCopyUrl}
               onToggleRead={(item) => void handleToggleRead(item)}
               onCreateStream={openCreateModal}
+              epics={epics}
+              onToggleEpicMembership={toggleEpicMembership}
             />
             <DetailPane {...detailPaneProps} />
           </>

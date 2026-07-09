@@ -59,6 +59,7 @@ export const en: Messages = {
     unreadOnly: "Unread only",
     markAllRead: "Mark all read",
     assignedYou: "Assigned",
+    addToEpic: "Add to epic",
     noStream: "No streams",
     createStream: "+ Stream",
     emptyItems: "No items",

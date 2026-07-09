@@ -39,6 +39,7 @@ pub struct StoredItem {
     pub comments: i64,
     pub milestone: Option<String>,
     pub assignees: Vec<String>,
+    pub epic_ids: Vec<i64>,
     pub is_read: bool,
 }
 
@@ -358,7 +359,8 @@ impl Db {
         let conn = self.lock();
         let sql = format!(
             "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
-                    i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees, {IS_READ_EXPR}
+                    i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees,
+                    (SELECT GROUP_CONCAT(ei.epic_id) FROM epic_items ei WHERE ei.item_url = i.url), {IS_READ_EXPR}
              FROM items i
              JOIN stream_items si ON si.item_url = i.url
              LEFT JOIN read_state r ON r.item_url = i.url
@@ -383,7 +385,8 @@ impl Db {
                     comments: row.get(10)?,
                     milestone: row.get(11)?,
                     assignees: split_assignees(row.get::<_, String>(12)?),
-                    is_read: row.get(13)?,
+                    epic_ids: split_epic_ids(row.get::<_, Option<String>>(13)?),
+                    is_read: row.get(14)?,
                 })
             })
             .map_err(db_err)?
@@ -773,7 +776,8 @@ impl Db {
         let conn = self.lock();
         let sql = format!(
             "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
-                    i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees, {IS_READ_EXPR},
+                    i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees,
+                    (SELECT GROUP_CONCAT(ei.epic_id) FROM epic_items ei WHERE ei.item_url = i.url), {IS_READ_EXPR},
                     ei.position
              FROM epic_items ei
              JOIN items i ON i.url = ei.item_url
@@ -799,9 +803,10 @@ impl Db {
                         comments: row.get(10)?,
                         milestone: row.get(11)?,
                         assignees: split_assignees(row.get::<_, String>(12)?),
-                        is_read: row.get(13)?,
+                        epic_ids: split_epic_ids(row.get::<_, Option<String>>(13)?),
+                        is_read: row.get(14)?,
                     },
-                    epic_position: row.get(14)?,
+                    epic_position: row.get(15)?,
                 })
             })
             .map_err(db_err)?
@@ -993,6 +998,11 @@ fn split_assignees(raw: String) -> Vec<String> {
     } else {
         raw.split(',').map(String::from).collect()
     }
+}
+
+fn split_epic_ids(raw: Option<String>) -> Vec<i64> {
+    raw.map(|r| r.split(',').filter_map(|p| p.parse().ok()).collect())
+        .unwrap_or_default()
 }
 
 fn row_to_epic(row: &rusqlite::Row<'_>) -> rusqlite::Result<Epic> {

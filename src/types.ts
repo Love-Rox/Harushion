@@ -44,6 +44,7 @@ export type Item = {
   milestone: string | null;
   comments: number;
   assignees: string[];
+  epicIds: number[];
   isRead: boolean;
 };
 

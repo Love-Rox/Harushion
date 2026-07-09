@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Item, Stream, Viewer } from "../types";
+import type { Epic, Item, Stream, Viewer } from "../types";
 import { relativeTime } from "./format";
 import { StateBadge } from "./StateBadge";
 import { useI18n } from "../i18n";
@@ -24,6 +24,8 @@ type Props = {
   onCopyUrl: (url: string) => Promise<void>;
   onToggleRead: (item: Item) => void;
   onCreateStream: () => void;
+  epics: Epic[];
+  onToggleEpicMembership: (epicId: number, itemUrl: string, isMember: boolean) => Promise<void>;
 };
 
 export function ItemList({
@@ -43,10 +45,33 @@ export function ItemList({
   onCopyUrl,
   onToggleRead,
   onCreateStream,
+  epics,
+  onToggleEpicMembership,
 }: Props) {
   const { t } = useI18n();
   const [renderCount, setRenderCount] = useState(RENDER_PAGE);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [epicPopoverUrl, setEpicPopoverUrl] = useState<string | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!epicPopoverUrl) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setEpicPopoverUrl(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setEpicPopoverUrl(null);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [epicPopoverUrl]);
+
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Stream やフィルタが変わったら先頭ページに戻す
@@ -148,6 +173,22 @@ export function ItemList({
                   <span className="item-main">
                     <span className="item-title">{item.title}</span>
                     <span className="item-meta">
+                      {item.epicIds.length > 0 && (
+                        <span className="item-epic-chips">
+                          {item.epicIds.map((id) => {
+                            const epic = epics.find((e) => e.id === id);
+                            if (!epic) return null;
+                            return (
+                              <span
+                                key={id}
+                                className="stream-color-chip item-epic-chip"
+                                style={{ backgroundColor: `#${epic.color ?? "8b98a5"}` }}
+                                title={epic.name}
+                              />
+                            );
+                          })}
+                        </span>
+                      )}
                       {assignedToMe && (
                         <span className="assigned-badge">{t("list.assignedYou")}</span>
                       )}
@@ -159,6 +200,42 @@ export function ItemList({
                     </span>
                   </span>
                 </button>
+                <button
+                  className="item-open-browser"
+                  title={t("list.addToEpic")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEpicPopoverUrl((prev) => (prev === item.url ? null : item.url));
+                  }}
+                >
+                  ⊕
+                </button>
+                {epicPopoverUrl === item.url && (
+                  <div className="popover item-epic-popover" ref={popoverRef}>
+                    {epics.length === 0 && (
+                      <p className="popover-empty">{t("detail.noEpicsHint")}</p>
+                    )}
+                    {epics.map((epic) => {
+                      const isMember = item.epicIds.includes(epic.id);
+                      return (
+                        <button
+                          key={epic.id}
+                          className="item-epic-popover-row"
+                          onClick={() => void onToggleEpicMembership(epic.id, item.url, isMember)}
+                        >
+                          <span className="item-epic-popover-check">{isMember ? "✓" : ""}</span>
+                          {epic.color && (
+                            <span
+                              className="stream-color-chip"
+                              style={{ backgroundColor: `#${epic.color}` }}
+                            />
+                          )}
+                          <span className="item-epic-popover-name">{epic.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <button
                   className="item-open-browser"
                   title={t("list.copyUrl")}

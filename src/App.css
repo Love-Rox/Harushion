@@ -339,6 +339,7 @@ body {
   align-items: stretch;
   width: 100%;
   border-bottom: 1px solid var(--border);
+  position: relative; /* エピックポップオーバーのアンカー */
 }
 
 .item:hover {
@@ -1645,4 +1646,62 @@ body {
   font-weight: 700;
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* ---- リスト行のエピック表示/追加 ---- */
+
+.item-epic-chips {
+  display: inline-flex;
+  gap: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.item-epic-chip {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.item-epic-popover {
+  right: 40px;
+  top: 70%;
+  min-width: 180px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.item-epic-popover-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  background: none;
+  border: none;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  border-radius: 4px;
+}
+
+.item-epic-popover-row:hover {
+  background: var(--bg);
+}
+
+.item-epic-popover-check {
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.item-epic-popover-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
