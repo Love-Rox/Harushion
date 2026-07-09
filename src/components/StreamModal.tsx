@@ -40,6 +40,7 @@ export type BuilderState = {
   kind: "" | "issue" | "pr";
   status: "" | "open" | "closed" | "merged";
   relations: BuilderRelation[];
+  relationsMode: "and" | "or";
   repos: string[];
   org: string;
   labels: string[];
@@ -89,6 +90,7 @@ export function parseQuery(q: string): BuilderState & { rest: string } {
     kind: "",
     status: "",
     relations: [],
+    relationsMode: "and",
     repos: [],
     org: "",
     labels: [],
@@ -180,6 +182,64 @@ export function buildQuery(state: BuilderState & { rest: string }): string {
   return tokens.join(" ");
 }
 
+/**
+ * Expands one builder state into the condition-set lines it represents.
+ * GitHub ANDs qualifiers within one query line but only ORs relation
+ * qualifiers (author:@me / assignee:@me / ...) across separate lines, so
+ * "or" mode needs one line per relation to express "any of these relations".
+ * In "and" mode (or with ≤1 relation selected, where and/or are equivalent)
+ * this is just the single line buildQuery already produces.
+ */
+export function expandBuilderToSets(state: BuilderState & { rest: string }): string[] {
+  if (state.relationsMode !== "or" || state.relations.length < 2) {
+    return [buildQuery(state)];
+  }
+  return RELATION_OPTIONS.filter((r) => state.relations.includes(r.value)).map((r) =>
+    buildQuery({ ...state, relations: [r.value] }),
+  );
+}
+
+/** Fingerprint of a parsed state's non-relation fields, used by foldOrGroup to detect "identical but for the relation". */
+function nonRelationFingerprint(state: BuilderState & { rest: string }): string {
+  return JSON.stringify({
+    kind: state.kind,
+    status: state.status,
+    repos: state.repos,
+    org: state.org,
+    labels: state.labels,
+    excludeDraft: state.excludeDraft,
+    sort: state.sort,
+    rest: state.rest,
+  });
+}
+
+/**
+ * Inverse of expandBuilderToSets's "or" branch. Given 2+ condition-set
+ * lines, detects whether each carries exactly one relation qualifier (all
+ * distinct across the group) and is otherwise identical, and if so folds
+ * them back into a single "or" mode builder state with the union of
+ * relations. Returns null if the lines don't form a valid or-group.
+ */
+export function foldOrGroup(
+  lines: string[],
+): { state: BuilderState & { rest: string }; folded: true } | null {
+  if (lines.length < 2) return null;
+  const parsed = lines.map((line) => parseQuery(line));
+  if (!parsed.every((p) => p.relations.length === 1)) return null;
+
+  const relationSet = new Set(parsed.map((p) => p.relations[0]));
+  if (relationSet.size !== parsed.length) return null;
+
+  const fingerprint = nonRelationFingerprint(parsed[0]);
+  if (!parsed.every((p) => nonRelationFingerprint(p) === fingerprint)) return null;
+
+  const relations = RELATION_OPTIONS.filter((r) => relationSet.has(r.value)).map((r) => r.value);
+  return {
+    state: { ...parsed[0], relations, relationsMode: "or" },
+    folded: true,
+  };
+}
+
 /** Splits a saved `query` string into its condition-set lines, trimming each and dropping empty ones. */
 export function splitQuerySets(raw: string): string[] {
   return raw
@@ -202,6 +262,7 @@ const DEFAULT_FORM_STATE: QueryFormState = {
   kind: "",
   status: "",
   relations: [],
+  relationsMode: "and",
   repos: [],
   org: "",
   labels: [],
@@ -209,6 +270,38 @@ const DEFAULT_FORM_STATE: QueryFormState = {
   sort: "",
   rest: "",
 };
+
+export type QueryGroup = { lines: string[]; start: number; state: QueryFormState };
+
+/**
+ * Groups condition-set lines for display/editing: a maximal run of adjacent
+ * lines that fold into one "or" mode builder state (via foldOrGroup) is
+ * presented as a single group; everything else is its own single-line
+ * group. This is the inverse of what updateBuilder does with
+ * expandBuilderToSets when writing a group's edits back into querySets.
+ */
+export function computeGroups(sets: string[]): QueryGroup[] {
+  const groups: QueryGroup[] = [];
+  let i = 0;
+  while (i < sets.length) {
+    let matched: { end: number; state: QueryFormState } | null = null;
+    for (let j = sets.length; j > i + 1; j--) {
+      const folded = foldOrGroup(sets.slice(i, j));
+      if (folded) {
+        matched = { end: j - 1, state: folded.state };
+        break;
+      }
+    }
+    if (matched) {
+      groups.push({ lines: sets.slice(i, matched.end + 1), start: i, state: matched.state });
+      i = matched.end + 1;
+    } else {
+      groups.push({ lines: [sets[i]], start: i, state: parseQuery(sets[i]) });
+      i += 1;
+    }
+  }
+  return groups;
+}
 
 export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onDuplicate }: Props) {
   const [name, setName] = useState(stream?.name ?? "");
@@ -232,15 +325,20 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
     return sets.length > 0 ? sets : [""];
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [builder, setBuilder] = useState<QueryFormState>(() => parseQuery(querySets[0]));
+  const [builder, setBuilder] = useState<QueryFormState>(() => computeGroups(querySets)[0].state);
   const [manualText, setManualText] = useState(() => joinQuerySets(querySets));
   const [repoInput, setRepoInput] = useState("");
   const [repoError, setRepoError] = useState<string | null>(null);
   const [labelInput, setLabelInput] = useState("");
 
+  // querySets の隣接行のうち foldOrGroup で畳めるものは 1 グループ(1チップ)
+  // として扱う。selectedIndex はグループのインデックス。
+  const groups = computeGroups(querySets);
+
   // 保存対象のクエリ文字列。 手動タブでは manualText、ビルダータブでは
   // querySets を正とし、いずれも空行を除いて trim・結合する。
-  const query = mode === "manual" ? joinQuerySets(splitQuerySets(manualText)) : joinQuerySets(querySets);
+  const query =
+    mode === "manual" ? joinQuerySets(splitQuerySets(manualText)) : joinQuerySets(querySets);
   const nameValid = name.trim().length > 0;
   const queryValid = query.trim().length > 0;
   const intervalValid = intervalSec >= 60;
@@ -248,31 +346,41 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
   const updateBuilder = (patch: Partial<QueryFormState>) => {
     setBuilder((prev) => {
       const next = { ...prev, ...patch };
-      setQuerySets(querySets.map((s, i) => (i === selectedIndex ? buildQuery(next) : s)));
+      const group = groups[selectedIndex];
+      setQuerySets([
+        ...querySets.slice(0, group.start),
+        ...expandBuilderToSets(next),
+        ...querySets.slice(group.start + group.lines.length),
+      ]);
       return next;
     });
   };
 
   const selectSet = (index: number) => {
     setSelectedIndex(index);
-    setBuilder(parseQuery(querySets[index]));
+    setBuilder(groups[index].state);
   };
 
   const addSet = () => {
     const line = buildQuery({ ...DEFAULT_FORM_STATE, sort: "updated-desc" });
     setQuerySets([...querySets, line]);
-    setSelectedIndex(querySets.length);
+    setSelectedIndex(groups.length);
     setBuilder({ ...DEFAULT_FORM_STATE, sort: "updated-desc" });
   };
 
   const removeSet = (index: number) => {
-    if (querySets.length <= 1) return;
-    const next = querySets.filter((_, i) => i !== index);
+    if (groups.length <= 1) return;
+    const group = groups[index];
+    const next = [
+      ...querySets.slice(0, group.start),
+      ...querySets.slice(group.start + group.lines.length),
+    ];
     setQuerySets(next);
     if (index === selectedIndex) {
-      const nextIndex = Math.min(selectedIndex, next.length - 1);
+      const nextGroups = computeGroups(next);
+      const nextIndex = Math.min(selectedIndex, nextGroups.length - 1);
       setSelectedIndex(nextIndex);
-      setBuilder(parseQuery(next[nextIndex]));
+      setBuilder(nextGroups[nextIndex].state);
     } else if (index < selectedIndex) {
       setSelectedIndex(selectedIndex - 1);
     }
@@ -317,10 +425,11 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
   const switchToBuilder = () => {
     const sets = splitQuerySets(manualText);
     const nextSets = sets.length > 0 ? sets : [""];
-    const nextIndex = Math.min(selectedIndex, nextSets.length - 1);
+    const nextGroups = computeGroups(nextSets);
+    const nextIndex = Math.min(selectedIndex, nextGroups.length - 1);
     setQuerySets(nextSets);
     setSelectedIndex(nextIndex);
-    setBuilder(parseQuery(nextSets[nextIndex]));
+    setBuilder(nextGroups[nextIndex].state);
     setMode("builder");
   };
 
@@ -444,12 +553,17 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
             </div>
 
             <div className="query-set-chip-row">
-              {querySets.map((_, i) => (
+              {groups.map((group, i) => (
                 <span key={i} className={`query-set-chip${i === selectedIndex ? " active" : ""}`}>
-                  <button type="button" className="query-set-chip-select" onClick={() => selectSet(i)}>
+                  <button
+                    type="button"
+                    className="query-set-chip-select"
+                    onClick={() => selectSet(i)}
+                  >
                     条件{i + 1}
+                    {group.lines.length > 1 ? ` (OR×${group.lines.length})` : ""}
                   </button>
-                  {querySets.length > 1 && (
+                  {groups.length > 1 && (
                     <button
                       type="button"
                       className="chip-remove"
@@ -500,7 +614,42 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                 </div>
 
                 <div className="field">
-                  <span className="field-label">自分との関係</span>
+                  <div className="field-label-row">
+                    <span className="field-label">自分との関係</span>
+                    <div
+                      className="relations-mode-toggle"
+                      title={
+                        builder.relations.length < 2
+                          ? "関係を2つ以上選択すると切り替えられます"
+                          : undefined
+                      }
+                    >
+                      <button
+                        type="button"
+                        className={
+                          builder.relationsMode === "and"
+                            ? "relations-mode-btn active"
+                            : "relations-mode-btn"
+                        }
+                        disabled={builder.relations.length < 2}
+                        onClick={() => updateBuilder({ relationsMode: "and" })}
+                      >
+                        すべて満たす (AND)
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          builder.relationsMode === "or"
+                            ? "relations-mode-btn active"
+                            : "relations-mode-btn"
+                        }
+                        disabled={builder.relations.length < 2}
+                        onClick={() => updateBuilder({ relationsMode: "or" })}
+                      >
+                        いずれか (OR)
+                      </button>
+                    </div>
+                  </div>
                   <div className="builder-checkboxes">
                     {RELATION_OPTIONS.map((opt) => (
                       <label key={opt.value} className="builder-checkbox">
@@ -644,9 +793,13 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                   />
                 </label>
 
-                <div className="query-preview mono-input">{buildQuery(builder) || "(クエリなし)"}</div>
+                <div className="query-preview mono-input">
+                  {expandBuilderToSets(builder).join("\n") || "(クエリなし)"}
+                </div>
                 {querySets.length > 1 && (
-                  <div className="query-merge-count">マージ結果: {querySets.length} 件の条件セット</div>
+                  <div className="query-merge-count">
+                    マージ結果: {querySets.length} 件の条件セット
+                  </div>
                 )}
               </div>
             ) : (

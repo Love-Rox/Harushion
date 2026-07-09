@@ -22,6 +22,11 @@ brew install --cask --no-quarantine harushion
 無署名配布のため `--no-quarantine` を推奨します(付けない場合は初回起動時に右クリック → 開く)。
 更新は `brew upgrade --cask harushion`。新しいバージョンが出るとアプリ内バナーでも通知されます。
 
+## インストール (Windows / Linux)
+
+[Releases](https://github.com/Love-Rox/Harushion/releases) から nsis インストーラ (Windows) / AppImage・deb・rpm (Linux) をダウンロードしてください。
+以降はアプリ内の更新通知から「今すぐ更新して再起動」でアプリ内自己更新できます(更新パッケージは Tauri updater の署名で検証されます)。
+
 ## 必要環境
 
 - [GitHub CLI](https://cli.github.com)(`gh auth login` 済みであること)

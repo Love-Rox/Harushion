@@ -159,6 +159,11 @@ async fn check_for_update(state: State<'_, AppState>) -> Result<Option<updater::
 }
 
 #[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    updater::install_and_restart(app).await
+}
+
+#[tauri::command]
 fn list_graph_repos(db: State<'_, Db>) -> Result<Vec<String>, String> {
     db.list_graph_repos()
 }
@@ -196,6 +201,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState::new())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
@@ -267,7 +274,8 @@ pub fn run() {
             reorder_streams,
             list_folder_order,
             reorder_folders,
-            check_for_update
+            check_for_update,
+            install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

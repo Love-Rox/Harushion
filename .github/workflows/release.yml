@@ -8,13 +8,29 @@ permissions:
   contents: write
 
 jobs:
-  macos:
-    runs-on: macos-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target universal-apple-darwin
+          - platform: windows-latest
+            args: ""
+          - platform: ubuntu-22.04
+            args: ""
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
         with:
           # ビルド番号 (git rev-list --count) のため全履歴を取得
           fetch-depth: 0
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - uses: actions/setup-node@v4
         with:
@@ -22,7 +38,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -33,14 +49,20 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Windows/Linux のアプリ内自己更新用 (Tauri updater の minisign 署名)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Harushion ${{ github.ref_name }}"
           releaseBody: |
-            Homebrew でのインストール / 更新:
+            **macOS (Homebrew)**
             ```
             brew install --cask --no-quarantine love-rox/tap/harushion
             brew upgrade --cask harushion
             ```
             ※ 無署名配布のため `--no-quarantine` を推奨(付けない場合は初回に右クリック→開く)。
-          args: --target universal-apple-darwin
+
+            **Windows / Linux**
+            下のアセット (nsis / AppImage / deb / rpm) をダウンロード。以降はアプリ内の更新通知から自動更新できます。
+          args: ${{ matrix.args }}

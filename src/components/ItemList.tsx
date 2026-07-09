@@ -20,6 +20,7 @@ type Props = {
   selectedItemUrl: string | null;
   onItemSelect: (item: Item) => void;
   onItemOpenInBrowser: (item: Item) => void;
+  onCopyUrl: (url: string) => Promise<void>;
   onToggleRead: (item: Item) => void;
   onCreateStream: () => void;
 };
@@ -38,10 +39,12 @@ export function ItemList({
   selectedItemUrl,
   onItemSelect,
   onItemOpenInBrowser,
+  onCopyUrl,
   onToggleRead,
   onCreateStream,
 }: Props) {
   const [renderCount, setRenderCount] = useState(RENDER_PAGE);
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Stream やフィルタが変わったら先頭ページに戻す
@@ -147,6 +150,22 @@ export function ItemList({
                       {item.comments > 0 && <> · 💬{item.comments}</>}
                     </span>
                   </span>
+                </button>
+                <button
+                  className="item-open-browser"
+                  title="URLをコピー"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onCopyUrl(item.url).then(() => {
+                      setCopiedUrl(item.url);
+                      setTimeout(
+                        () => setCopiedUrl((prev) => (prev === item.url ? null : prev)),
+                        1500,
+                      );
+                    });
+                  }}
+                >
+                  {copiedUrl === item.url ? "✓" : "⧉"}
                 </button>
                 <button
                   className="item-open-browser"

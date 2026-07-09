@@ -109,6 +109,7 @@ export type UpdateInfo = {
   current: string;
   latest: string;
   url: string;
+  method: "brew" | "updater";
 };
 
 export type GraphPr = { number: number; title: string; url: string };

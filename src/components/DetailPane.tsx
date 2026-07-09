@@ -16,6 +16,7 @@ type Props = {
   onDismissError: () => void;
   onOpenUrl: (url: string) => void;
   onOpenInApp: (url: string) => void;
+  onCopyUrl: (url: string) => Promise<void>;
   loadRepoLabels: (repo: string) => Promise<LabelInfo[]>;
 };
 
@@ -87,6 +88,7 @@ export function DetailPane({
   onDismissError,
   onOpenUrl,
   onOpenInApp,
+  onCopyUrl,
   loadRepoLabels,
 }: Props) {
   const [commentText, setCommentText] = useState("");
@@ -101,6 +103,7 @@ export function DetailPane({
   const [mergeMethod, setMergeMethod] = useState<MergeMethod>("squash");
   const [deleteBranch, setDeleteBranch] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
   const [propsGone, setPropsGone] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const propsRef = useRef<HTMLDivElement>(null);
@@ -443,6 +446,17 @@ export function DetailPane({
             <span className="detail-repo">{detail.repo}</span>
             <span className="detail-number">#{detail.number}</span>
             <span className="detail-eyebrow-spacer" />
+            <button
+              className="btn btn-small"
+              onClick={() => {
+                void onCopyUrl(detail.url).then(() => {
+                  setUrlCopied(true);
+                  setTimeout(() => setUrlCopied(false), 1500);
+                });
+              }}
+            >
+              {urlCopied ? "コピーしました" : "URLをコピー"}
+            </button>
             <button className="btn btn-small" onClick={() => onOpenInApp(detail.url)}>
               アプリ内で開く
             </button>

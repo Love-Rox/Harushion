@@ -16,6 +16,32 @@ pub struct UpdateInfo {
     pub current: String,
     pub latest: String,
     pub url: String,
+    /// 更新手段: macOS は Homebrew 誘導、Windows/Linux はアプリ内自己更新
+    pub method: String, // "brew" | "updater"
+}
+
+fn update_method() -> String {
+    if cfg!(target_os = "macos") { "brew" } else { "updater" }.to_string()
+}
+
+/// Windows/Linux 向け: tauri-plugin-updater で新版をダウンロード・適用して再起動する。
+/// 更新パッケージは Tauri の minisign 署名(tauri.conf.json の pubkey)で検証される。
+pub async fn install_and_restart(app: AppHandle) -> Result<(), String> {
+    if cfg!(target_os = "macos") {
+        return Err("macOS では Homebrew で更新してください: brew upgrade --cask harushion".into());
+    }
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| format!("アップデーターを初期化できませんでした: {e}"))?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| format!("更新の確認に失敗しました: {e}"))?
+        .ok_or("適用可能な更新がありません")?;
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| format!("更新の適用に失敗しました: {e}"))?;
+    app.restart();
 }
 
 /// "1.2.3" 形式を比較。パースできない部分は 0 扱い。
@@ -65,6 +91,7 @@ pub async fn check_update(state: &AppState) -> Result<Option<UpdateInfo>, String
             .as_str()
             .unwrap_or("https://github.com/Love-Rox/Harushion/releases")
             .to_string(),
+        method: update_method(),
     }))
 }
 
