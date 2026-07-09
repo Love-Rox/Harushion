@@ -44,12 +44,16 @@ type Props = {
   state: string;
   isDraft: boolean;
   size?: number;
+  layout?: "row" | "column";
 };
 
-export function StateBadge({ kind, state, isDraft, size = 14 }: Props) {
+export function StateBadge({ kind, state, isDraft, size = 14, layout = "row" }: Props) {
   const { icon, label, color } = resolveState(kind, state, isDraft);
   return (
-    <span className={`state-badge ${color}`} title={label}>
+    <span
+      className={`state-badge ${color}${layout === "column" ? " state-badge-col" : ""}`}
+      title={`${kind === "pr" ? "Pull Request" : "Issue"} · ${label}`}
+    >
       <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
         {icon.map((d) => (
           <path key={d} d={d} />

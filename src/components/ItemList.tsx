@@ -100,7 +100,7 @@ export function ItemList({
                   <span className="read-dot" />
                 </button>
                 <button className="item-open" onClick={() => onItemSelect(item)} title={item.title}>
-                  <span className={`kind kind-${item.kind}`}>{item.kind === "pr" ? "PR" : "Issue"}</span>
+                  <StateBadge kind={item.kind} state={item.state} isDraft={item.isDraft} size={16} layout="column" />
                   <span className="item-main">
                     <span className="item-title">{item.title}</span>
                     <span className="item-meta">
@@ -111,7 +111,6 @@ export function ItemList({
                       {item.comments > 0 && <> · 💬{item.comments}</>}
                     </span>
                   </span>
-                  <StateBadge kind={item.kind} state={item.state} isDraft={item.isDraft} />
                 </button>
                 <button
                   className="item-open-browser"

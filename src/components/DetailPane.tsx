@@ -382,54 +382,61 @@ export function DetailPane({
     <div className="detail-pane">
       <div className="detail-scroll">
         <header className="detail-header">
-          <div className="detail-header-top">
-            <span className={`kind kind-${detail.kind}`}>{detail.kind === "pr" ? "PR" : "Issue"}</span>
-            <button className="detail-title-link" onClick={() => onOpenUrl(detail.url)}>
-              #{detail.number} {detail.title}
+          <div className="detail-eyebrow">
+            <span className="detail-repo">{detail.repo}</span>
+            <span className="detail-number">#{detail.number}</span>
+            <span className="detail-eyebrow-spacer" />
+            <button className="btn btn-small" onClick={() => onOpenInApp(detail.url)}>
+              アプリ内で開く
+            </button>
+            <button className="btn btn-small" onClick={() => onOpenUrl(detail.url)}>
+              ブラウザで開く
             </button>
           </div>
+          <button className="detail-title-link" onClick={() => onOpenUrl(detail.url)}>
+            {detail.title}
+          </button>
           <div className="detail-header-meta">
-            <span className="detail-repo">{detail.repo}</span>
-            <StateBadge kind={detail.kind} state={detail.state} isDraft={detail.isDraft} size={16} />
-            {detail.authorAvatar && <img src={detail.authorAvatar} className="avatar" alt="" />}
-            {detail.author && <span>{detail.author}</span>}
+            <StateBadge kind={detail.kind} state={detail.state} isDraft={detail.isDraft} size={14} />
+            {detail.authorAvatar && <img src={detail.authorAvatar} className="avatar avatar-small" alt="" />}
+            {detail.author && <span className="detail-author">{detail.author}</span>}
             <span className="detail-time">
               作成 {relativeTime(detail.createdAt)} · 更新 {relativeTime(detail.updatedAt)}
             </span>
             {detail.milestone && <span className="milestone-chip">🎯 {detail.milestone}</span>}
-            <button className="btn btn-primary detail-open-browser-btn" onClick={() => onOpenInApp(detail.url)}>
-              アプリ内で開く
-            </button>
-            <button className="btn detail-open-browser-btn" onClick={() => onOpenUrl(detail.url)}>
-              ブラウザで開く
-            </button>
           </div>
         </header>
 
-        {detail.kind === "pr" && (
-          <div className="pr-info-bar">
-            <span className="pr-branches">
-              <code>{detail.baseRef}</code> ← <code>{detail.headRef}</code>
-            </span>
-            <span className="pr-diffstat">
-              <span className="pr-additions">+{detail.additions}</span>{" "}
-              <span className="pr-deletions">-{detail.deletions}</span>{" "}
-              <span className="pr-changed-files">{detail.changedFiles} files</span>
-            </span>
-            {detail.mergeable && (
-              <span className={`mergeable-badge${detail.mergeable === "CONFLICTING" ? " warn" : ""}`}>
-                {mergeableLabel(detail.mergeable)}
-              </span>
-            )}
-            {detail.reviewDecision && (
-              <span className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}>
-                {reviewDecisionLabel(detail.reviewDecision)}
-              </span>
-            )}
-          </div>
-        )}
+        <div className="detail-props">
+          {detail.kind === "pr" && (
+            <div className="prop-row">
+              <span className="prop-label">ブランチ</span>
+              <div className="prop-value pr-info">
+                <span className="pr-branches">
+                  <code>{detail.baseRef}</code> ← <code>{detail.headRef}</code>
+                </span>
+                <span className="pr-diffstat">
+                  <span className="pr-additions">+{detail.additions}</span>{" "}
+                  <span className="pr-deletions">-{detail.deletions}</span>{" "}
+                  <span className="pr-changed-files">{detail.changedFiles} files</span>
+                </span>
+                {detail.mergeable && (
+                  <span className={`mergeable-badge${detail.mergeable === "CONFLICTING" ? " warn" : ""}`}>
+                    {mergeableLabel(detail.mergeable)}
+                  </span>
+                )}
+                {detail.reviewDecision && (
+                  <span className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}>
+                    {reviewDecisionLabel(detail.reviewDecision)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
-        <div className="labels-row">
+          <div className="prop-row">
+            <span className="prop-label">ラベル</span>
+            <div className="prop-value labels-row">
           {detail.labels.map((l) => (
             <span
               key={l.name}
@@ -482,20 +489,61 @@ export function DetailPane({
               )}
             </div>
           )}
-        </div>
+            </div>
+          </div>
 
-        <div className="assignees-row">
-          <span className="assignees-label">担当:</span>
-          {detail.assignees.length === 0 && <span className="fg-muted">なし</span>}
-          {detail.assignees.map((a) => (
-            <span key={a} className="assignee-chip">
-              {a}
-            </span>
-          ))}
-          {viewer && (
-            <button className="btn btn-small" onClick={handleAssignToggle} disabled={actionPending}>
-              {isAssignedToMe ? label("アサイン解除", "assignMe") : label("自分をアサイン", "assignMe")}
-            </button>
+          <div className="prop-row">
+            <span className="prop-label">担当</span>
+            <div className="prop-value assignees-row">
+              {detail.assignees.length === 0 && <span className="fg-muted">なし</span>}
+              {detail.assignees.map((a) => (
+                <span key={a} className="assignee-chip">
+                  {a}
+                </span>
+              ))}
+              {viewer && (
+                <button className="btn btn-small" onClick={handleAssignToggle} disabled={actionPending}>
+                  {isAssignedToMe ? label("アサイン解除", "assignMe") : label("自分をアサイン", "assignMe")}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {detail.kind === "pr" && detail.checks.length > 0 && (
+            <div className="prop-row">
+              <span className="prop-label">チェック</span>
+              <div className="prop-value prop-value-stack">
+                {detail.checks.map((c, i) => {
+                  const icon = checkIconInfo(c.status);
+                  return (
+                    <div
+                      key={`${c.name}-${i}`}
+                      className={`check-row${c.url ? " clickable" : ""}`}
+                      onClick={() => c.url && onOpenUrl(c.url)}
+                    >
+                      <span className={`check-icon ${icon.className}`}>{icon.char}</span>
+                      <span className="check-name">{c.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {detail.kind === "pr" && detail.reviews.length > 0 && (
+            <div className="prop-row">
+              <span className="prop-label">レビュー</span>
+              <div className="prop-value prop-value-stack">
+                {detail.reviews.map((r, i) => (
+                  <div key={`${r.author}-${i}`} className="review-row">
+                    <span className="review-author">{r.author ?? "unknown"}</span>
+                    <span className={`review-state-badge rs-${r.state.toLowerCase()}`}>
+                      {reviewStateLabel(r.state)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 
@@ -511,42 +559,12 @@ export function DetailPane({
         )}
         {loading && <div className="detail-loading-bar" />}
 
-        {detail.kind === "pr" && detail.checks.length > 0 && (
-          <section className="checks-section">
-            <h3 className="detail-section-title">チェック</h3>
-            {detail.checks.map((c, i) => {
-              const icon = checkIconInfo(c.status);
-              return (
-                <div
-                  key={`${c.name}-${i}`}
-                  className={`check-row${c.url ? " clickable" : ""}`}
-                  onClick={() => c.url && onOpenUrl(c.url)}
-                >
-                  <span className={`check-icon ${icon.className}`}>{icon.char}</span>
-                  <span className="check-name">{c.name}</span>
-                </div>
-              );
-            })}
-          </section>
-        )}
-
-        {detail.kind === "pr" && detail.reviews.length > 0 && (
-          <section className="reviews-section">
-            <h3 className="detail-section-title">レビュー</h3>
-            {detail.reviews.map((r, i) => (
-              <div key={`${r.author}-${i}`} className="review-row">
-                <span className="review-author">{r.author ?? "unknown"}</span>
-                <span className={`review-state-badge rs-${r.state.toLowerCase()}`}>
-                  {reviewStateLabel(r.state)}
-                </span>
-              </div>
-            ))}
-          </section>
-        )}
-
         <section className="detail-body-section">
-          <h3 className="detail-section-title">本文</h3>
-          <div className="md" onClick={handleMdClick} dangerouslySetInnerHTML={{ __html: detail.bodyHtml }} />
+          {detail.bodyHtml ? (
+            <div className="md" onClick={handleMdClick} dangerouslySetInnerHTML={{ __html: detail.bodyHtml }} />
+          ) : (
+            <p className="fg-muted">本文なし</p>
+          )}
         </section>
 
         <section className="comments-section">
@@ -559,14 +577,14 @@ export function DetailPane({
             </p>
           )}
           {detail.comments.map((c, i) => (
-            <div className="comment" key={i}>
+            <article className="comment-card" key={i}>
               <div className="comment-header">
-                {c.authorAvatar && <img src={c.authorAvatar} className="avatar" alt="" />}
+                {c.authorAvatar && <img src={c.authorAvatar} className="avatar avatar-small" alt="" />}
                 <span className="comment-author">{c.author ?? "unknown"}</span>
                 <span className="comment-time">{relativeTime(c.createdAt)}</span>
               </div>
-              <div className="md" onClick={handleMdClick} dangerouslySetInnerHTML={{ __html: c.bodyHtml }} />
-            </div>
+              <div className="md comment-body" onClick={handleMdClick} dangerouslySetInnerHTML={{ __html: c.bodyHtml }} />
+            </article>
           ))}
         </section>
 

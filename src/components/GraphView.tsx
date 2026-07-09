@@ -155,11 +155,11 @@ function CommitGraph({
     dots.push({ cx, cy, color: laneColor(c.lane), key: c.oid });
 
     let hasMissingParent = false;
-    for (const parentOid of c.parents) {
+    c.parents.forEach((parentOid, parentIndex) => {
       const pi = indexByOid.get(parentOid);
       if (pi === undefined) {
         hasMissingParent = true;
-        continue;
+        return;
       }
       const parent = commits[pi];
       const px = dotX(parent.lane);
@@ -168,8 +168,11 @@ function CommitGraph({
         parent.lane === c.lane
           ? `M ${cx} ${cy} L ${px} ${py}`
           : `M ${cx} ${cy} C ${cx} ${(cy + py) / 2}, ${px} ${(cy + py) / 2}, ${px} ${py}`;
-      paths.push({ d, color: laneColor(c.lane), key: `${c.oid}-${parentOid}` });
-    }
+      // 第1親へのエッジは子のブランチ線の続きなので子のレーン色、
+      // 第2親以降(マージで合流してくる線)は親側のレーン色で塗る
+      const lane = parentIndex === 0 ? c.lane : parent.lane;
+      paths.push({ d, color: laneColor(lane), key: `${c.oid}-${parentOid}` });
+    });
     if (hasMissingParent) {
       stubs.push({ x: cx, y: cy, color: laneColor(c.lane), key: `${c.oid}-stub` });
     }
