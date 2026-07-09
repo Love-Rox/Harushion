@@ -93,3 +93,35 @@
 .folder-header-row.drop-below {
   box-shadow: inset 0 -2px 0 0 var(--accent);
 }
+
+/* ---- Sidebar: locale switcher ---- */
+
+.sidebar-locale-switcher {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-locale-label {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.sidebar-locale-switcher select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.sidebar-locale-switcher select:focus {
+  outline: none;
+  border-color: var(--accent);
+}

@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import type { BranchGraph, GraphBranch, GraphCommit } from "../types";
 import { relativeTime } from "./format";
+import { useI18n } from "../i18n";
+import type { TFunction } from "../i18n";
 
 const ROW_HEIGHT = 28;
 const LANE_WIDTH = 14;
@@ -32,22 +34,27 @@ type Props = {
 };
 
 export function GraphView({ repo, data, loading, error, onRefresh, onOpenInApp }: Props) {
+  const { t } = useI18n();
   return (
     <div className="graph-view">
       <header className="header graph-header">
         <div className="header-title">
           <h1 className="app-title">{repo}</h1>
-          {data && <code className="query">既定: {data.defaultBranch}</code>}
+          {data && (
+            <code className="query">
+              {t("graph.defaultBranch", { branch: data.defaultBranch })}
+            </code>
+          )}
         </div>
         <div className="header-right">
           <button className="btn" onClick={onRefresh} disabled={loading}>
-            {loading ? "更新中…" : "更新"}
+            {loading ? t("common.updating") : t("common.refresh")}
           </button>
           <button
             className="btn btn-primary"
             onClick={() => onOpenInApp(`https://github.com/${repo}`)}
           >
-            GitHubで開く
+            {t("graph.openInGithub")}
           </button>
         </div>
       </header>
@@ -57,7 +64,7 @@ export function GraphView({ repo, data, loading, error, onRefresh, onOpenInApp }
           <div className="error">
             <p>{error}</p>
             <button className="btn" onClick={onRefresh}>
-              再試行
+              {t("common.retry")}
             </button>
           </div>
         )}
@@ -69,9 +76,9 @@ export function GraphView({ repo, data, loading, error, onRefresh, onOpenInApp }
         {!error && data && (
           <>
             {loading && <div className="detail-loading-bar" />}
-            <BranchStrip branches={data.branches} onOpenInApp={onOpenInApp} />
+            <BranchStrip branches={data.branches} onOpenInApp={onOpenInApp} t={t} />
             {data.commits.length === 0 ? (
-              <p className="empty">コミットがありません</p>
+              <p className="empty">{t("graph.noCommits")}</p>
             ) : (
               <CommitGraph
                 commits={data.commits}
@@ -87,8 +94,8 @@ export function GraphView({ repo, data, loading, error, onRefresh, onOpenInApp }
   );
 }
 
-function branchDiffLabel(branch: GraphBranch): string {
-  if (branch.ahead === 0 && branch.behind === 0) return "最新";
+function branchDiffLabel(t: TFunction, branch: GraphBranch): string {
+  if (branch.ahead === 0 && branch.behind === 0) return t("graph.latest");
   const parts: string[] = [];
   if (branch.ahead > 0) parts.push(`↑${branch.ahead}`);
   if (branch.behind > 0) parts.push(`↓${branch.behind}`);
@@ -98,16 +105,18 @@ function branchDiffLabel(branch: GraphBranch): string {
 function BranchStrip({
   branches,
   onOpenInApp,
+  t,
 }: {
   branches: GraphBranch[];
   onOpenInApp: (url: string) => void;
+  t: TFunction;
 }) {
   return (
     <div className="branch-strip">
       {branches.map((b) => (
         <span key={b.name} className={`branch-chip${b.isDefault ? " branch-chip-default" : ""}`}>
           <span className="branch-chip-name">{b.name}</span>
-          {!b.isDefault && <span className="branch-chip-diff">{branchDiffLabel(b)}</span>}
+          {!b.isDefault && <span className="branch-chip-diff">{branchDiffLabel(t, b)}</span>}
           {b.pr && (
             <button
               className="branch-chip-pr"

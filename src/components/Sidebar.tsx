@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, FormEvent } from "react";
 import { COLOR_PALETTE } from "../types";
 import type { Stream } from "../types";
+import { useI18n } from "../i18n";
+import type { Locale } from "../i18n";
 import "./Sidebar.css";
 
 type Props = {
@@ -56,6 +58,7 @@ export function Sidebar({
   onAddGraphRepo,
   onRemoveGraphRepo,
 }: Props) {
+  const { t, locale, setLocale } = useI18n();
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [addFormOpen, setAddFormOpen] = useState(false);
   const [addValue, setAddValue] = useState("");
@@ -251,7 +254,7 @@ export function Sidebar({
         {stream.unreadCount > 0 && <span className="stream-badge">{stream.unreadCount}</span>}
         <button
           className="stream-edit"
-          title="編集"
+          title={t("common.edit")}
           onClick={(e) => {
             e.stopPropagation();
             onEdit(stream);
@@ -288,7 +291,7 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-streams">
-        {streams.length === 0 && <p className="sidebar-empty">ストリームがありません</p>}
+        {streams.length === 0 && <p className="sidebar-empty">{t("sidebar.empty")}</p>}
         {root.map((stream) => renderRow(stream, null, root))}
         {groups.map(([folder, folderStreams]) => {
           const folderColor = folderColors[folder];
@@ -319,7 +322,7 @@ export function Sidebar({
                 </button>
                 <button
                   className="folder-color-btn"
-                  title="フォルダの色"
+                  title={t("sidebar.folderColor")}
                   onClick={(e) => {
                     e.stopPropagation();
                     setColorPopoverFolder((prev) => (prev === folder ? null : folder));
@@ -333,8 +336,8 @@ export function Sidebar({
                       <button
                         type="button"
                         className={`color-swatch color-swatch-none${!folderColor ? " selected" : ""}`}
-                        title="なし"
-                        aria-label="色なし"
+                        title={t("common.none")}
+                        aria-label={t("common.noColor")}
                         onClick={() => {
                           void onSetFolderColor(folder, null);
                           setColorPopoverFolder(null);
@@ -346,7 +349,7 @@ export function Sidebar({
                           key={hex}
                           className={`color-swatch${folderColor === hex ? " selected" : ""}`}
                           style={{ backgroundColor: `#${hex}` }}
-                          aria-label={`色 #${hex}`}
+                          aria-label={t("common.colorHex", { hex })}
                           onClick={() => {
                             void onSetFolderColor(folder, hex);
                             setColorPopoverFolder(null);
@@ -364,12 +367,14 @@ export function Sidebar({
         })}
       </div>
       <button className="sidebar-add" onClick={onCreate}>
-        + Stream
+        {t("sidebar.addStream")}
       </button>
 
       <div className="sidebar-graph-section">
-        <div className="sidebar-section-title">ブランチグラフ</div>
-        {graphRepos.length === 0 && <p className="sidebar-graph-empty">リポジトリがありません</p>}
+        <div className="sidebar-section-title">{t("sidebar.graphSectionTitle")}</div>
+        {graphRepos.length === 0 && (
+          <p className="sidebar-graph-empty">{t("sidebar.graphEmpty")}</p>
+        )}
         {graphRepos.map((repo) => (
           <div
             key={repo}
@@ -379,7 +384,7 @@ export function Sidebar({
             <span className="graph-repo-name">{repo}</span>
             <button
               className="graph-repo-remove"
-              title="削除"
+              title={t("common.delete")}
               onClick={(e) => {
                 e.stopPropagation();
                 onRemoveGraphRepo(repo);
@@ -407,7 +412,7 @@ export function Sidebar({
                 className="btn btn-primary btn-small"
                 disabled={adding || addValue.trim().length === 0}
               >
-                {adding ? "追加中…" : "追加"}
+                {adding ? t("sidebar.addingRepo") : t("common.add")}
               </button>
               <button
                 type="button"
@@ -415,15 +420,29 @@ export function Sidebar({
                 onClick={closeAddForm}
                 disabled={adding}
               >
-                キャンセル
+                {t("common.cancel")}
               </button>
             </div>
           </form>
         ) : (
           <button className="sidebar-add" onClick={() => setAddFormOpen(true)}>
-            + リポジトリ
+            {t("sidebar.addRepoButton")}
           </button>
         )}
+      </div>
+
+      <div className="sidebar-locale-switcher">
+        <label className="sidebar-locale-label" htmlFor="sidebar-locale-select">
+          {t("sidebar.localeLabel")}
+        </label>
+        <select
+          id="sidebar-locale-select"
+          value={locale}
+          onChange={(e) => setLocale(e.target.value as Locale)}
+        >
+          <option value="ja">日本語</option>
+          <option value="en">English</option>
+        </select>
       </div>
     </aside>
   );

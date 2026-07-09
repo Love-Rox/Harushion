@@ -3,6 +3,8 @@ import type { FormEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { COLOR_PALETTE } from "../types";
 import type { Stream } from "../types";
+import { useI18n } from "../i18n";
+import type { MessagePath } from "../i18n";
 import "./StreamModal.css";
 
 export type StreamCreateInput = {
@@ -48,13 +50,21 @@ export type BuilderState = {
   sort: "" | "updated-desc" | "created-desc" | "comments-desc";
 };
 
-const RELATION_OPTIONS: { value: BuilderRelation; label: string }[] = [
-  { value: "involves", label: "関与" },
-  { value: "author", label: "作成" },
-  { value: "assignee", label: "アサイン" },
-  { value: "mentions", label: "メンション" },
-  { value: "review-requested", label: "レビュー依頼" },
+const RELATION_OPTIONS: { value: BuilderRelation }[] = [
+  { value: "involves" },
+  { value: "author" },
+  { value: "assignee" },
+  { value: "mentions" },
+  { value: "review-requested" },
 ];
+
+const RELATION_LABEL_KEYS: Record<BuilderRelation, MessagePath> = {
+  involves: "modal.relation.involves",
+  author: "modal.relation.author",
+  assignee: "modal.relation.assignee",
+  mentions: "modal.relation.mentions",
+  "review-requested": "modal.relation.reviewRequested",
+};
 
 const SORT_VALUES = ["updated-desc", "created-desc", "comments-desc"] as const;
 
@@ -304,6 +314,7 @@ export function computeGroups(sets: string[]): QueryGroup[] {
 }
 
 export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onDuplicate }: Props) {
+  const { t } = useI18n();
   const [name, setName] = useState(stream?.name ?? "");
   const [folder, setFolder] = useState(stream?.folder ?? "");
   const [intervalSec, setIntervalSec] = useState(stream?.intervalSec ?? 120);
@@ -397,7 +408,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
     const value = repoInput.trim();
     if (!value) return;
     if (!REPO_PATTERN.test(value)) {
-      setRepoError("owner/name の形式で入力してください");
+      setRepoError(t("modal.repoInvalid"));
       return;
     }
     setRepoError(null);
@@ -490,7 +501,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
     setError(null);
     try {
       await onDuplicate({
-        name: `${name.trim()} のコピー`,
+        name: t("modal.duplicateName", { name: name.trim() }),
         query: query.trim(),
         folder: folder.trim() || null,
         intervalSec,
@@ -517,15 +528,15 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
       }}
     >
       <div className="modal stream-modal" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">{stream ? "ストリームを編集" : "新しいストリーム"}</h2>
+        <h2 className="modal-title">{stream ? t("modal.editTitle") : t("modal.createTitle")}</h2>
         <form onSubmit={handleSubmit}>
           <label className="field">
-            <span className="field-label">名前</span>
+            <span className="field-label">{t("modal.name")}</span>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="例: 自分宛て"
+              placeholder={t("modal.namePlaceholder")}
               autoFocus
               {...NO_TEXT_AUTOFILL}
             />
@@ -533,21 +544,21 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
 
           <div className="field">
             <div className="query-field-header">
-              <span className="field-label">検索クエリ</span>
+              <span className="field-label">{t("modal.searchQuery")}</span>
               <div className="query-mode-tabs">
                 <button
                   type="button"
                   className={mode === "builder" ? "query-mode-tab active" : "query-mode-tab"}
                   onClick={switchToBuilder}
                 >
-                  ビルダー
+                  {t("modal.builderTab")}
                 </button>
                 <button
                   type="button"
                   className={mode === "manual" ? "query-mode-tab active" : "query-mode-tab"}
                   onClick={switchToManual}
                 >
-                  手動
+                  {t("modal.manualTab")}
                 </button>
               </div>
             </div>
@@ -560,15 +571,15 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                     className="query-set-chip-select"
                     onClick={() => selectSet(i)}
                   >
-                    条件{i + 1}
-                    {group.lines.length > 1 ? ` (OR×${group.lines.length})` : ""}
+                    {t("modal.conditionSet", { n: i + 1 })}
+                    {group.lines.length > 1 ? t("modal.orCount", { n: group.lines.length }) : ""}
                   </button>
                   {groups.length > 1 && (
                     <button
                       type="button"
                       className="chip-remove"
                       onClick={() => removeSet(i)}
-                      aria-label={`条件${i + 1} を削除`}
+                      aria-label={t("modal.removeConditionSet", { n: i + 1 })}
                     >
                       ×
                     </button>
@@ -576,7 +587,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                 </span>
               ))}
               <button type="button" className="btn btn-small query-set-add" onClick={addSet}>
-                + 条件を追加
+                {t("modal.addConditionSet")}
               </button>
             </div>
 
@@ -584,44 +595,42 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
               <div className="query-builder">
                 <div className="query-builder-row">
                   <label className="field">
-                    <span className="field-label">種別</span>
+                    <span className="field-label">{t("modal.kind")}</span>
                     <select
                       value={builder.kind}
                       onChange={(e) =>
                         updateBuilder({ kind: e.target.value as BuilderState["kind"] })
                       }
                     >
-                      <option value="">すべて</option>
-                      <option value="issue">Issue</option>
-                      <option value="pr">Pull Request</option>
+                      <option value="">{t("modal.all")}</option>
+                      <option value="issue">{t("modal.issue")}</option>
+                      <option value="pr">{t("modal.pullRequest")}</option>
                     </select>
                   </label>
 
                   <label className="field">
-                    <span className="field-label">状態</span>
+                    <span className="field-label">{t("modal.statusLabel")}</span>
                     <select
                       value={builder.status}
                       onChange={(e) =>
                         updateBuilder({ status: e.target.value as BuilderState["status"] })
                       }
                     >
-                      <option value="">すべて</option>
-                      <option value="open">Open</option>
-                      <option value="closed">Closed</option>
-                      <option value="merged">マージ済み</option>
+                      <option value="">{t("modal.all")}</option>
+                      <option value="open">{t("modal.statusOpen")}</option>
+                      <option value="closed">{t("modal.statusClosed")}</option>
+                      <option value="merged">{t("modal.statusMerged")}</option>
                     </select>
                   </label>
                 </div>
 
                 <div className="field">
                   <div className="field-label-row">
-                    <span className="field-label">自分との関係</span>
+                    <span className="field-label">{t("modal.relationLabel")}</span>
                     <div
                       className="relations-mode-toggle"
                       title={
-                        builder.relations.length < 2
-                          ? "関係を2つ以上選択すると切り替えられます"
-                          : undefined
+                        builder.relations.length < 2 ? t("modal.relationsModeHint") : undefined
                       }
                     >
                       <button
@@ -634,7 +643,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                         disabled={builder.relations.length < 2}
                         onClick={() => updateBuilder({ relationsMode: "and" })}
                       >
-                        すべて満たす (AND)
+                        {t("modal.relationsModeAnd")}
                       </button>
                       <button
                         type="button"
@@ -646,7 +655,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                         disabled={builder.relations.length < 2}
                         onClick={() => updateBuilder({ relationsMode: "or" })}
                       >
-                        いずれか (OR)
+                        {t("modal.relationsModeOr")}
                       </button>
                     </div>
                   </div>
@@ -658,14 +667,14 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                           checked={builder.relations.includes(opt.value)}
                           onChange={() => toggleRelation(opt.value)}
                         />
-                        <span>{opt.label}</span>
+                        <span>{t(RELATION_LABEL_KEYS[opt.value])}</span>
                       </label>
                     ))}
                   </div>
                 </div>
 
                 <div className="field">
-                  <span className="field-label">リポジトリ</span>
+                  <span className="field-label">{t("modal.repos")}</span>
                   <div className="chip-input-row">
                     <input
                       type="text"
@@ -684,7 +693,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                       {...NO_TEXT_AUTOFILL}
                     />
                     <button type="button" className="btn btn-small" onClick={addRepo}>
-                      追加
+                      {t("common.add")}
                     </button>
                   </div>
                   {repoError && <p className="field-error">{repoError}</p>}
@@ -697,7 +706,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                             type="button"
                             className="chip-remove"
                             onClick={() => removeRepo(r)}
-                            aria-label={`${r} を削除`}
+                            aria-label={t("modal.removeRepoChip", { repo: r })}
                           >
                             ×
                           </button>
@@ -708,18 +717,18 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                 </div>
 
                 <label className="field">
-                  <span className="field-label">Org</span>
+                  <span className="field-label">{t("modal.org")}</span>
                   <input
                     type="text"
                     value={builder.org}
                     onChange={(e) => updateBuilder({ org: e.target.value })}
-                    placeholder="例: octocat-inc"
+                    placeholder={t("modal.orgPlaceholder")}
                     {...NO_TEXT_AUTOFILL}
                   />
                 </label>
 
                 <div className="field">
-                  <span className="field-label">ラベル</span>
+                  <span className="field-label">{t("modal.labels")}</span>
                   <div className="chip-input-row">
                     <input
                       type="text"
@@ -731,11 +740,11 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                           addLabel();
                         }
                       }}
-                      placeholder="例: bug"
+                      placeholder={t("modal.labelPlaceholder")}
                       {...NO_TEXT_AUTOFILL}
                     />
                     <button type="button" className="btn btn-small" onClick={addLabel}>
-                      追加
+                      {t("common.add")}
                     </button>
                   </div>
                   {builder.labels.length > 0 && (
@@ -747,7 +756,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                             type="button"
                             className="chip-remove"
                             onClick={() => removeLabel(l)}
-                            aria-label={`${l} を削除`}
+                            aria-label={t("modal.removeLabelChip", { label: l })}
                           >
                             ×
                           </button>
@@ -763,42 +772,42 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                     checked={builder.excludeDraft}
                     onChange={(e) => updateBuilder({ excludeDraft: e.target.checked })}
                   />
-                  <span className="field-label">Draft を除外</span>
+                  <span className="field-label">{t("modal.excludeDraft")}</span>
                 </label>
 
                 <label className="field">
-                  <span className="field-label">並び順</span>
+                  <span className="field-label">{t("modal.sortLabel")}</span>
                   <select
                     value={builder.sort}
                     onChange={(e) =>
                       updateBuilder({ sort: e.target.value as BuilderState["sort"] })
                     }
                   >
-                    <option value="updated-desc">更新が新しい順</option>
-                    <option value="created-desc">作成が新しい順</option>
-                    <option value="comments-desc">コメントが多い順</option>
-                    <option value="">指定なし</option>
+                    <option value="updated-desc">{t("modal.sortUpdatedDesc")}</option>
+                    <option value="created-desc">{t("modal.sortCreatedDesc")}</option>
+                    <option value="comments-desc">{t("modal.sortCommentsDesc")}</option>
+                    <option value="">{t("modal.sortNone")}</option>
                   </select>
                 </label>
 
                 <label className="field">
-                  <span className="field-label">その他の条件</span>
+                  <span className="field-label">{t("modal.otherConditions")}</span>
                   <input
                     type="text"
                     className="mono-input"
                     value={builder.rest}
                     onChange={(e) => updateBuilder({ rest: e.target.value })}
-                    placeholder="例: no:assignee"
+                    placeholder={t("modal.otherConditionsPlaceholder")}
                     {...NO_TEXT_AUTOFILL}
                   />
                 </label>
 
                 <div className="query-preview mono-input">
-                  {expandBuilderToSets(builder).join("\n") || "(クエリなし)"}
+                  {expandBuilderToSets(builder).join("\n") || t("modal.noQuery")}
                 </div>
                 {querySets.length > 1 && (
                   <div className="query-merge-count">
-                    マージ結果: {querySets.length} 件の条件セット
+                    {t("modal.mergeResult", { n: querySets.length })}
                   </div>
                 )}
               </div>
@@ -821,30 +830,30 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                 void openUrl(GITHUB_SEARCH_DOCS_URL);
               }}
             >
-              クエリ構文について
+              {t("modal.docsLink")}
             </a>
           </div>
 
           <label className="field">
-            <span className="field-label">フォルダ (任意)</span>
+            <span className="field-label">{t("modal.folder")}</span>
             <input
               type="text"
               value={folder}
               onChange={(e) => setFolder(e.target.value)}
-              placeholder="例: 仕事"
+              placeholder={t("modal.folderPlaceholder")}
               {...NO_TEXT_AUTOFILL}
             />
           </label>
 
           <div className="field">
-            <span className="field-label">色</span>
+            <span className="field-label">{t("modal.color")}</span>
             <div className="color-swatch-row">
               <button
                 type="button"
                 className={`color-swatch color-swatch-none${color === null ? " selected" : ""}`}
                 onClick={() => setColor(null)}
-                title="なし"
-                aria-label="色なし"
+                title={t("common.none")}
+                aria-label={t("common.noColor")}
               />
               {COLOR_PALETTE.map((hex) => (
                 <button
@@ -853,14 +862,14 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                   className={`color-swatch${color === hex ? " selected" : ""}`}
                   style={{ backgroundColor: `#${hex}` }}
                   onClick={() => setColor(hex)}
-                  aria-label={`色 #${hex}`}
+                  aria-label={t("common.colorHex", { hex })}
                 />
               ))}
             </div>
           </div>
 
           <label className="field">
-            <span className="field-label">更新間隔 (秒)</span>
+            <span className="field-label">{t("modal.interval")}</span>
             <input
               type="number"
               min={60}
@@ -876,7 +885,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                 checked={enabled}
                 onChange={(e) => setEnabled(e.target.checked)}
               />
-              <span className="field-label">有効</span>
+              <span className="field-label">{t("modal.enabled")}</span>
             </label>
           )}
 
@@ -896,20 +905,20 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                   saving || deleting || duplicating || !nameValid || !queryValid || !intervalValid
                 }
               >
-                {duplicating ? "複製中…" : "複製"}
+                {duplicating ? t("modal.duplicating") : t("modal.duplicate")}
               </button>
             )}
             {stream &&
               (confirmingDelete ? (
                 <span className="delete-confirm">
-                  <span className="delete-confirm-text">本当に削除しますか?</span>
+                  <span className="delete-confirm-text">{t("modal.deleteConfirm")}</span>
                   <button
                     type="button"
                     className="btn btn-danger"
                     onClick={() => void handleDelete()}
                     disabled={deleting}
                   >
-                    削除する
+                    {t("modal.deleteConfirmButton")}
                   </button>
                   <button
                     type="button"
@@ -917,7 +926,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                     onClick={() => setConfirmingDelete(false)}
                     disabled={deleting}
                   >
-                    キャンセル
+                    {t("common.cancel")}
                   </button>
                 </span>
               ) : (
@@ -926,19 +935,19 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
                   className="btn btn-danger-outline"
                   onClick={() => setConfirmingDelete(true)}
                 >
-                  削除
+                  {t("common.delete")}
                 </button>
               ))}
             <span className="modal-actions-spacer" />
             <button type="button" className="btn" onClick={onClose} disabled={saving}>
-              キャンセル
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               className="btn btn-primary"
               disabled={saving || !nameValid || !queryValid || !intervalValid}
             >
-              {saving ? "保存中…" : "保存"}
+              {saving ? t("common.saving") : t("common.save")}
             </button>
           </div>
         </form>

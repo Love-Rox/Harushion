@@ -23,6 +23,7 @@ import type {
 import { ItemList } from "./components/ItemList";
 import { DetailPane } from "./components/DetailPane";
 import { GraphView } from "./components/GraphView";
+import { useI18n } from "./i18n";
 import "./App.css";
 
 type View = { type: "stream" } | { type: "graph"; repo: string };
@@ -38,6 +39,7 @@ function actionKey(action: ItemAction): string {
 }
 
 function App() {
+  const { t } = useI18n();
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [streams, setStreams] = useState<Stream[]>([]);
   const [selectedStreamId, setSelectedStreamId] = useState<number | null>(null);
@@ -448,10 +450,15 @@ function App() {
       {updateInfo && (
         <div className="update-banner">
           <span>
-            新しいバージョン v{updateInfo.latest} が利用可能です(現在 v{updateInfo.current})。
+            {t("banner.updateAvailable", {
+              latest: updateInfo.latest,
+              current: updateInfo.current,
+            })}
             {updateInfo.method === "brew" && (
               <>
-                <code>brew upgrade --cask harushion</code> で更新できます。
+                {t("banner.brewInstructionPrefix")}
+                <code>brew upgrade --cask harushion</code>
+                {t("banner.brewInstructionSuffix")}
               </>
             )}
           </span>
@@ -461,15 +468,15 @@ function App() {
               disabled={installingUpdate}
               onClick={() => void handleInstallUpdate()}
             >
-              {installingUpdate ? "更新を適用中…" : "今すぐ更新して再起動"}
+              {installingUpdate ? t("banner.installing") : t("banner.installAndRestart")}
             </button>
           )}
           <button className="btn btn-small" onClick={() => handleOpenUrl(updateInfo.url)}>
-            リリースを開く
+            {t("banner.openRelease")}
           </button>
           <button
             className="update-banner-close"
-            aria-label="閉じる"
+            aria-label={t("common.close")}
             onClick={() => setUpdateInfo(null)}
           >
             ×

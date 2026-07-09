@@ -3,6 +3,8 @@ import type { MouseEvent as ReactMouseEvent, UIEvent as ReactUIEvent } from "rea
 import type { Item, ItemAction, ItemDetail, LabelInfo, MergeMethod, Viewer } from "../types";
 import { relativeTime } from "./format";
 import { StateBadge } from "./StateBadge";
+import { useI18n } from "../i18n";
+import type { MessagePath, TFunction } from "../i18n";
 
 type Props = {
   item: Item | null;
@@ -20,31 +22,31 @@ type Props = {
   loadRepoLabels: (repo: string) => Promise<LabelInfo[]>;
 };
 
-function mergeableLabel(mergeable: string): string {
-  if (mergeable === "MERGEABLE") return "マージ可能";
-  if (mergeable === "CONFLICTING") return "コンフリクトあり";
-  return "判定中";
+function mergeableLabel(t: TFunction, mergeable: string): string {
+  if (mergeable === "MERGEABLE") return t("detail.mergeable.mergeable");
+  if (mergeable === "CONFLICTING") return t("detail.mergeable.conflicting");
+  return t("detail.mergeable.pending");
 }
 
-function reviewDecisionLabel(decision: string): string {
-  if (decision === "APPROVED") return "承認済み";
-  if (decision === "CHANGES_REQUESTED") return "変更要求あり";
-  if (decision === "REVIEW_REQUIRED") return "レビュー待ち";
+function reviewDecisionLabel(t: TFunction, decision: string): string {
+  if (decision === "APPROVED") return t("detail.reviewDecision.approved");
+  if (decision === "CHANGES_REQUESTED") return t("detail.reviewDecision.changesRequested");
+  if (decision === "REVIEW_REQUIRED") return t("detail.reviewDecision.reviewRequired");
   return decision;
 }
 
-function reviewStateLabel(state: string): string {
+function reviewStateLabel(t: TFunction, state: string): string {
   switch (state) {
     case "APPROVED":
-      return "承認";
+      return t("detail.reviewState.approved");
     case "CHANGES_REQUESTED":
-      return "変更要求";
+      return t("detail.reviewState.changesRequested");
     case "COMMENTED":
-      return "コメント";
+      return t("detail.reviewState.commented");
     case "DISMISSED":
-      return "却下";
+      return t("detail.reviewState.dismissed");
     case "PENDING":
-      return "保留中";
+      return t("detail.reviewState.pending");
     default:
       return state;
   }
@@ -91,6 +93,7 @@ export function DetailPane({
   onCopyUrl,
   loadRepoLabels,
 }: Props) {
+  const { t } = useI18n();
   const [commentText, setCommentText] = useState("");
   const [reviewBody, setReviewBody] = useState("");
   const [labelsOpen, setLabelsOpen] = useState(false);
@@ -147,7 +150,7 @@ export function DetailPane({
   if (!item) {
     return (
       <div className="detail-pane detail-empty">
-        <p className="empty">アイテムを選択してください</p>
+        <p className="empty">{t("detail.selectItem")}</p>
       </div>
     );
   }
@@ -159,7 +162,7 @@ export function DetailPane({
           <div className="error detail-error">
             <p>{error}</p>
             <button className="btn" onClick={onDismissError}>
-              閉じる
+              {t("common.close")}
             </button>
           </div>
         ) : (
@@ -171,7 +174,10 @@ export function DetailPane({
 
   const isAssignedToMe = viewer != null && detail.assignees.includes(viewer.login);
   const isPending = (key: string) => actionPending && pendingActionKey === key;
-  const label = (base: string, key: string) => (isPending(key) ? `${base}中…` : base);
+  const label = (baseKey: MessagePath, key: string) => {
+    const base = t(baseKey);
+    return isPending(key) ? t("common.pending", { action: base }) : base;
+  };
 
   const handleMdClick = (e: ReactMouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -260,20 +266,20 @@ export function DetailPane({
         buttons.push(
           confirmClose ? (
             <span className="delete-confirm" key="close-confirm">
-              <span className="delete-confirm-text">クローズしますか?</span>
+              <span className="delete-confirm-text">{t("detail.closeConfirm")}</span>
               <button
                 className="btn btn-danger"
                 disabled={actionPending}
                 onClick={() => void handleClose()}
               >
-                {label("実行", "close")}
+                {label("detail.confirmRun", "close")}
               </button>
               <button
                 className="btn"
                 disabled={actionPending}
                 onClick={() => setConfirmClose(false)}
               >
-                キャンセル
+                {t("common.cancel")}
               </button>
             </span>
           ) : (
@@ -283,7 +289,7 @@ export function DetailPane({
               disabled={actionPending}
               onClick={() => setConfirmClose(true)}
             >
-              クローズ
+              {t("detail.closeIssue")}
             </button>
           ),
         );
@@ -295,7 +301,7 @@ export function DetailPane({
             disabled={actionPending}
             onClick={() => void handleReopen()}
           >
-            {label("再オープン", "reopen")}
+            {label("detail.reopen", "reopen")}
           </button>,
         );
       }
@@ -309,7 +315,7 @@ export function DetailPane({
               disabled={actionPending}
               onClick={() => handleReadyToggle(false)}
             >
-              {label("レビュー準備完了", "ready:false")}
+              {label("detail.readyForReview", "ready:false")}
             </button>,
           );
         } else {
@@ -332,24 +338,24 @@ export function DetailPane({
                   onChange={(e) => setDeleteBranch(e.target.checked)}
                   disabled={actionPending}
                 />
-                ブランチ削除
+                {t("detail.deleteBranch")}
               </label>
               {confirmMerge ? (
                 <span className="delete-confirm">
-                  <span className="delete-confirm-text">マージする?</span>
+                  <span className="delete-confirm-text">{t("detail.mergeConfirm")}</span>
                   <button
                     className="btn btn-primary"
                     disabled={actionPending}
                     onClick={() => void handleMerge()}
                   >
-                    {label("実行", "merge")}
+                    {label("detail.confirmRun", "merge")}
                   </button>
                   <button
                     className="btn"
                     disabled={actionPending}
                     onClick={() => setConfirmMerge(false)}
                   >
-                    キャンセル
+                    {t("common.cancel")}
                   </button>
                 </span>
               ) : (
@@ -358,7 +364,7 @@ export function DetailPane({
                   disabled={actionPending}
                   onClick={() => setConfirmMerge(true)}
                 >
-                  マージ
+                  {t("detail.mergeButton")}
                 </button>
               )}
             </span>,
@@ -368,7 +374,7 @@ export function DetailPane({
               <input
                 type="text"
                 className="review-body-input"
-                placeholder="レビューコメント (任意)"
+                placeholder={t("detail.reviewCommentPlaceholder")}
                 value={reviewBody}
                 onChange={(e) => setReviewBody(e.target.value)}
                 disabled={actionPending}
@@ -378,22 +384,22 @@ export function DetailPane({
                 disabled={actionPending}
                 onClick={() => void handleReview("approve")}
               >
-                {label("Approve", "review:approve")}
+                {label("detail.approve", "review:approve")}
               </button>
               <button
                 className="btn"
                 disabled={actionPending || reviewBody.trim().length === 0}
-                title={reviewBody.trim().length === 0 ? "コメントを入力してください" : undefined}
+                title={reviewBody.trim().length === 0 ? t("detail.requestChangesTitle") : undefined}
                 onClick={() => void handleReview("requestChanges")}
               >
-                {label("変更をリクエスト", "review:requestChanges")}
+                {label("detail.requestChanges", "review:requestChanges")}
               </button>
               <button
                 className="btn"
                 disabled={actionPending}
                 onClick={() => void handleReview("comment")}
               >
-                {label("コメント", "review:comment")}
+                {label("detail.reviewComment", "review:comment")}
               </button>
             </span>,
           );
@@ -404,7 +410,7 @@ export function DetailPane({
               disabled={actionPending}
               onClick={() => handleReadyToggle(true)}
             >
-              {label("ドラフトに戻す", "ready:true")}
+              {label("detail.convertToDraft", "ready:true")}
             </button>,
           );
           buttons.push(
@@ -414,7 +420,7 @@ export function DetailPane({
               disabled={actionPending}
               onClick={() => handleUpdateBranch()}
             >
-              {label("ブランチ更新", "updateBranch")}
+              {label("detail.updateBranch", "updateBranch")}
             </button>,
           );
         }
@@ -426,7 +432,7 @@ export function DetailPane({
             disabled={actionPending}
             onClick={() => void handleReopen()}
           >
-            {label("再オープン", "reopen")}
+            {label("detail.reopen", "reopen")}
           </button>,
         );
       }
@@ -455,13 +461,13 @@ export function DetailPane({
                 });
               }}
             >
-              {urlCopied ? "コピーしました" : "URLをコピー"}
+              {urlCopied ? t("detail.copied") : t("detail.copyUrl")}
             </button>
             <button className="btn btn-small" onClick={() => onOpenInApp(detail.url)}>
-              アプリ内で開く
+              {t("detail.openInApp")}
             </button>
             <button className="btn btn-small" onClick={() => onOpenUrl(detail.url)}>
-              ブラウザで開く
+              {t("detail.openInBrowser")}
             </button>
           </div>
           <button className="detail-title-link" onClick={() => onOpenUrl(detail.url)}>
@@ -479,7 +485,10 @@ export function DetailPane({
             )}
             {detail.author && <span className="detail-author">{detail.author}</span>}
             <span className="detail-time">
-              作成 {relativeTime(detail.createdAt)} · 更新 {relativeTime(detail.updatedAt)}
+              {t("detail.createdUpdated", {
+                created: relativeTime(detail.createdAt),
+                updated: relativeTime(detail.updatedAt),
+              })}
             </span>
             {detail.milestone && <span className="milestone-chip">🎯 {detail.milestone}</span>}
           </div>
@@ -514,14 +523,14 @@ export function DetailPane({
                     </span>
                     {detail.mergeable === "CONFLICTING" && (
                       <span className="mergeable-badge warn">
-                        {mergeableLabel(detail.mergeable)}
+                        {mergeableLabel(t, detail.mergeable)}
                       </span>
                     )}
                     {detail.reviewDecision && (
                       <span
                         className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}
                       >
-                        {reviewDecisionLabel(detail.reviewDecision)}
+                        {reviewDecisionLabel(t, detail.reviewDecision)}
                       </span>
                     )}
                   </>
@@ -547,7 +556,7 @@ export function DetailPane({
         <div className="detail-props" ref={propsRef}>
           {detail.kind === "pr" && (
             <div className="prop-row">
-              <span className="prop-label">ブランチ</span>
+              <span className="prop-label">{t("detail.branch")}</span>
               <div className="prop-value pr-info">
                 <span className="pr-branches">
                   <code>{detail.baseRef}</code> ← <code>{detail.headRef}</code>
@@ -555,20 +564,22 @@ export function DetailPane({
                 <span className="pr-diffstat">
                   <span className="pr-additions">+{detail.additions}</span>{" "}
                   <span className="pr-deletions">-{detail.deletions}</span>{" "}
-                  <span className="pr-changed-files">{detail.changedFiles} files</span>
+                  <span className="pr-changed-files">
+                    {t("detail.changedFiles", { n: detail.changedFiles })}
+                  </span>
                 </span>
                 {detail.mergeable && (
                   <span
                     className={`mergeable-badge${detail.mergeable === "CONFLICTING" ? " warn" : ""}`}
                   >
-                    {mergeableLabel(detail.mergeable)}
+                    {mergeableLabel(t, detail.mergeable)}
                   </span>
                 )}
                 {detail.reviewDecision && (
                   <span
                     className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}
                   >
-                    {reviewDecisionLabel(detail.reviewDecision)}
+                    {reviewDecisionLabel(t, detail.reviewDecision)}
                   </span>
                 )}
               </div>
@@ -576,7 +587,7 @@ export function DetailPane({
           )}
 
           <div className="prop-row">
-            <span className="prop-label">ラベル</span>
+            <span className="prop-label">{t("detail.labels")}</span>
             <div className="prop-value labels-row">
               {detail.labels.map((l) => (
                 <span
@@ -588,11 +599,11 @@ export function DetailPane({
                 </span>
               ))}
               <button className="label-edit-btn" onClick={() => void openLabelsEditor()}>
-                編集
+                {t("common.edit")}
               </button>
               {labelsOpen && (
                 <div className="popover labels-popover">
-                  {labelsLoading && <p className="popover-loading">読み込み中…</p>}
+                  {labelsLoading && <p className="popover-loading">{t("common.loading")}</p>}
                   {labelsError && <p className="popover-error">{labelsError}</p>}
                   {!labelsLoading && repoLabelsList && (
                     <>
@@ -613,7 +624,7 @@ export function DetailPane({
                           </label>
                         ))}
                         {repoLabelsList.length === 0 && (
-                          <p className="popover-empty">ラベルがありません</p>
+                          <p className="popover-empty">{t("detail.noLabels")}</p>
                         )}
                       </div>
                       <div className="popover-actions">
@@ -622,14 +633,14 @@ export function DetailPane({
                           onClick={() => setLabelsOpen(false)}
                           disabled={actionPending}
                         >
-                          キャンセル
+                          {t("common.cancel")}
                         </button>
                         <button
                           className="btn btn-primary"
                           onClick={() => void applyLabels()}
                           disabled={actionPending}
                         >
-                          {label("適用", "editLabels")}
+                          {label("detail.applyLabels", "editLabels")}
                         </button>
                       </div>
                     </>
@@ -640,9 +651,11 @@ export function DetailPane({
           </div>
 
           <div className="prop-row">
-            <span className="prop-label">担当</span>
+            <span className="prop-label">{t("detail.assignees")}</span>
             <div className="prop-value assignees-row">
-              {detail.assignees.length === 0 && <span className="fg-muted">なし</span>}
+              {detail.assignees.length === 0 && (
+                <span className="fg-muted">{t("common.none")}</span>
+              )}
               {detail.assignees.map((a) => (
                 <span key={a} className="assignee-chip">
                   {a}
@@ -655,8 +668,8 @@ export function DetailPane({
                   disabled={actionPending}
                 >
                   {isAssignedToMe
-                    ? label("アサイン解除", "assignMe")
-                    : label("自分をアサイン", "assignMe")}
+                    ? label("detail.unassign", "assignMe")
+                    : label("detail.assignMe", "assignMe")}
                 </button>
               )}
             </div>
@@ -664,7 +677,7 @@ export function DetailPane({
 
           {detail.kind === "pr" && detail.checks.length > 0 && (
             <div className="prop-row">
-              <span className="prop-label">チェック</span>
+              <span className="prop-label">{t("detail.checks")}</span>
               <div className="prop-value prop-value-stack">
                 {detail.checks.map((c, i) => {
                   const icon = checkIconInfo(c.status);
@@ -685,13 +698,13 @@ export function DetailPane({
 
           {detail.kind === "pr" && detail.reviews.length > 0 && (
             <div className="prop-row">
-              <span className="prop-label">レビュー</span>
+              <span className="prop-label">{t("detail.reviews")}</span>
               <div className="prop-value prop-value-stack">
                 {detail.reviews.map((r, i) => (
                   <div key={`${r.author}-${i}`} className="review-row">
                     <span className="review-author">{r.author ?? "unknown"}</span>
                     <span className={`review-state-badge rs-${r.state.toLowerCase()}`}>
-                      {reviewStateLabel(r.state)}
+                      {reviewStateLabel(t, r.state)}
                     </span>
                   </div>
                 ))}
@@ -704,7 +717,7 @@ export function DetailPane({
           <div className="error detail-error">
             <p>{error}</p>
             <button className="btn" onClick={onDismissError}>
-              閉じる
+              {t("common.close")}
             </button>
           </div>
         )}
@@ -718,17 +731,18 @@ export function DetailPane({
               dangerouslySetInnerHTML={{ __html: detail.bodyHtml }}
             />
           ) : (
-            <p className="fg-muted">本文なし</p>
+            <p className="fg-muted">{t("detail.noBody")}</p>
           )}
         </section>
 
         <section className="comments-section">
           <h3 className="detail-section-title">
-            コメント{detail.commentsTotal > 0 && ` (${detail.commentsTotal})`}
+            {t("detail.comments")}
+            {detail.commentsTotal > 0 && ` (${detail.commentsTotal})`}
           </h3>
           {detail.commentsTotal > detail.comments.length && (
             <p className="comments-hint">
-              他{detail.commentsTotal - detail.comments.length}件のコメント
+              {t("detail.moreComments", { n: detail.commentsTotal - detail.comments.length })}
             </p>
           )}
           {detail.comments.map((c, i) => (
@@ -753,7 +767,7 @@ export function DetailPane({
           <textarea
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
-            placeholder="コメントを書く…"
+            placeholder={t("detail.commentPlaceholder")}
             disabled={actionPending}
           />
           <button
@@ -761,7 +775,7 @@ export function DetailPane({
             disabled={actionPending || commentText.trim().length === 0}
             onClick={() => void handleSubmitComment()}
           >
-            {label("送信", "comment")}
+            {label("detail.send", "comment")}
           </button>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Item, Stream, Viewer } from "../types";
 import { relativeTime } from "./format";
 import { StateBadge } from "./StateBadge";
+import { useI18n } from "../i18n";
 
 /** 無限スクロールの1ページあたりの描画件数 */
 const RENDER_PAGE = 50;
@@ -43,6 +44,7 @@ export function ItemList({
   onToggleRead,
   onCreateStream,
 }: Props) {
+  const { t } = useI18n();
   const [renderCount, setRenderCount] = useState(RENDER_PAGE);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -80,13 +82,13 @@ export function ItemList({
             <>
               <label className="unread-toggle">
                 <input type="checkbox" checked={unreadOnly} onChange={onToggleUnreadOnly} />
-                未読のみ
+                {t("list.unreadOnly")}
               </label>
               <button className="btn" onClick={onMarkAllRead}>
-                全て既読
+                {t("list.markAllRead")}
               </button>
               <button className="btn btn-primary" onClick={onPollNow} disabled={polling}>
-                {polling ? "更新中…" : "更新"}
+                {polling ? t("common.updating") : t("common.refresh")}
               </button>
             </>
           )}
@@ -107,15 +109,17 @@ export function ItemList({
         )}
         {!error && !stream && (
           <div className="empty empty-create">
-            <p>ストリームがありません</p>
+            <p>{t("list.noStream")}</p>
             <button className="btn btn-primary" onClick={onCreateStream}>
-              + Stream
+              {t("list.createStream")}
             </button>
           </div>
         )}
-        {!error && stream && loading && items.length === 0 && <p className="empty">読み込み中…</p>}
+        {!error && stream && loading && items.length === 0 && (
+          <p className="empty">{t("common.loading")}</p>
+        )}
         {!error && stream && !loading && items.length === 0 && (
-          <p className="empty">アイテムがありません</p>
+          <p className="empty">{t("list.emptyItems")}</p>
         )}
         {stream &&
           items.slice(0, renderCount).map((item) => {
@@ -127,7 +131,7 @@ export function ItemList({
               >
                 <button
                   className="read-toggle"
-                  title={item.isRead ? "未読にする" : "既読にする"}
+                  title={item.isRead ? t("list.markUnread") : t("list.markRead")}
                   onClick={() => onToggleRead(item)}
                 >
                   <span className="read-dot" />
@@ -153,7 +157,7 @@ export function ItemList({
                 </button>
                 <button
                   className="item-open-browser"
-                  title="URLをコピー"
+                  title={t("list.copyUrl")}
                   onClick={(e) => {
                     e.stopPropagation();
                     void onCopyUrl(item.url).then(() => {
@@ -169,7 +173,7 @@ export function ItemList({
                 </button>
                 <button
                   className="item-open-browser"
-                  title={`${item.url} をブラウザで開く`}
+                  title={t("list.openInBrowser", { url: item.url })}
                   onClick={(e) => {
                     e.stopPropagation();
                     onItemOpenInBrowser(item);
