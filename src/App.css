@@ -634,6 +634,25 @@ body {
   text-overflow: ellipsis;
 }
 
+.detail-sticky-repo {
+  flex-shrink: 0;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.detail-sticky-props {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
 .spinner {
   width: 28px;
   height: 28px;

@@ -162,15 +162,16 @@
 }
 
 .color-swatch-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  gap: 6px;
+  width: 100%;
 }
 
 .color-swatch {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 26px;
   border-radius: 50%;
   border: 2px solid transparent;
   padding: 0;

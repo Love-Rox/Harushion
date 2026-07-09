@@ -220,7 +220,7 @@ export function Sidebar({
         onDrop={(e) => handleStreamDrop(e, stream, sectionFolder, sectionStreams)}
         onClick={() => onSelect(stream.id)}
       >
-        {stream.color && <span className="stream-color-dot" style={{ backgroundColor: `#${stream.color}` }} />}
+        {stream.color && <span className="stream-color-chip" style={{ backgroundColor: `#${stream.color}` }} />}
         <span className="stream-name">{stream.name}</span>
         {stream.unreadCount > 0 && <span className="stream-badge">{stream.unreadCount}</span>}
         <button
@@ -271,7 +271,12 @@ export function Sidebar({
           return (
             <div className="stream-folder" key={folder}>
               <div
-                className={`folder-header-row${draggedFolder === folder ? " dragging" : ""}${folderIndicatorClass}`}
+                className={`folder-header-row${draggedFolder === folder ? " dragging" : ""}${folderIndicatorClass}${folderColor ? " folder-tinted" : ""}`}
+                style={
+                  folderColor
+                    ? { backgroundColor: `color-mix(in srgb, #${folderColor} 16%, transparent)` }
+                    : undefined
+                }
                 draggable
                 onDragStart={(e) => handleFolderDragStart(e, folder)}
                 onDragEnd={handleFolderDragEnd}
@@ -280,9 +285,6 @@ export function Sidebar({
               >
                 <button className="folder-header" onClick={() => toggleFolder(folder)}>
                   <span className={`folder-arrow${collapsedFolders.has(folder) ? " collapsed" : ""}`}>▾</span>
-                  {folderColor && (
-                    <span className="folder-color-dot" style={{ backgroundColor: `#${folderColor}` }} />
-                  )}
                   {folder}
                 </button>
                 <button

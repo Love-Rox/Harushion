@@ -101,7 +101,9 @@ export function DetailPane({
   const [mergeMethod, setMergeMethod] = useState<MergeMethod>("squash");
   const [deleteBranch, setDeleteBranch] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [propsGone, setPropsGone] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const propsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setCommentText("");
@@ -115,10 +117,15 @@ export function DetailPane({
     // アイテム切替時はスクロール位置を先頭に戻す
     scrollRef.current?.scrollTo({ top: 0 });
     setScrolled(false);
+    setPropsGone(false);
   }, [item?.url]);
 
   const handleScroll = (e: ReactUIEvent<HTMLDivElement>) => {
     setScrolled(e.currentTarget.scrollTop > 56);
+    // プロパティ表がスティッキーバーの下に消えたら、凝縮版をバーに追加する
+    const containerTop = e.currentTarget.getBoundingClientRect().top;
+    const propsRect = propsRef.current?.getBoundingClientRect();
+    setPropsGone(propsRect != null && propsRect.bottom <= containerTop + 8);
   };
 
   useEffect(() => {
@@ -423,14 +430,52 @@ export function DetailPane({
             {scrolled && (
               <div className="detail-sticky-title">
                 <StateBadge kind={detail.kind} state={detail.state} isDraft={detail.isDraft} size={14} />
+                <span className="detail-sticky-repo">
+                  {detail.repo}#{detail.number}
+                </span>
                 <span className="detail-sticky-title-text">{detail.title}</span>
+              </div>
+            )}
+            {propsGone && (
+              <div className="detail-sticky-props">
+                {detail.kind === "pr" && (
+                  <>
+                    <span className="pr-branches">
+                      <code>{detail.baseRef}</code> ← <code>{detail.headRef}</code>
+                    </span>
+                    <span className="pr-diffstat">
+                      <span className="pr-additions">+{detail.additions}</span>{" "}
+                      <span className="pr-deletions">-{detail.deletions}</span>
+                    </span>
+                    {detail.mergeable === "CONFLICTING" && (
+                      <span className="mergeable-badge warn">{mergeableLabel(detail.mergeable)}</span>
+                    )}
+                    {detail.reviewDecision && (
+                      <span className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}>
+                        {reviewDecisionLabel(detail.reviewDecision)}
+                      </span>
+                    )}
+                  </>
+                )}
+                {detail.labels.slice(0, 4).map((l) => (
+                  <span
+                    key={l.name}
+                    className="label-chip label-chip-small"
+                    style={{ background: `#${l.color}`, color: labelTextColor(l.color) }}
+                  >
+                    {l.name}
+                  </span>
+                ))}
+                {detail.labels.length > 4 && (
+                  <span className="fg-muted">+{detail.labels.length - 4}</span>
+                )}
               </div>
             )}
             {actionBar}
           </div>
         )}
 
-        <div className="detail-props">
+        <div className="detail-props" ref={propsRef}>
           {detail.kind === "pr" && (
             <div className="prop-row">
               <span className="prop-label">ブランチ</span>
