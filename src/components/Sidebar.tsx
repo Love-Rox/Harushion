@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent, FormEvent } from "react";
+import type { CSSProperties, DragEvent, FormEvent } from "react";
 import { COLOR_PALETTE } from "../types";
 import type { Stream } from "../types";
 import "./Sidebar.css";
@@ -209,10 +209,12 @@ export function Sidebar({
 
   const renderRow = (stream: Stream, sectionFolder: string | null, sectionStreams: Stream[]) => {
     const indicatorClass = dropIndicator?.id === stream.id ? ` drop-${dropIndicator.position}` : "";
+    const folderTint = sectionFolder ? folderColors[sectionFolder] : undefined;
     return (
       <div
         key={stream.id}
-        className={`stream-row${stream.id === selectedStreamId ? " active" : ""}${stream.enabled ? "" : " disabled"}${draggedStream?.id === stream.id ? " dragging" : ""}${indicatorClass}`}
+        className={`stream-row${stream.id === selectedStreamId ? " active" : ""}${stream.enabled ? "" : " disabled"}${draggedStream?.id === stream.id ? " dragging" : ""}${folderTint ? " folder-tinted" : ""}${indicatorClass}`}
+        style={folderTint ? ({ "--folder-tint": `#${folderTint}` } as CSSProperties) : undefined}
         draggable
         onDragStart={(e) => handleStreamDragStart(e, stream)}
         onDragEnd={handleStreamDragEnd}
