@@ -20,6 +20,7 @@ type Props = {
   onItemSelect: (item: EpicItem) => void;
   onRefresh: () => void;
   onEdit: () => void;
+  onToggleArchive: () => void;
   onRemoveItem: (url: string) => void;
   onReorder: (urls: string[]) => void;
 };
@@ -35,6 +36,7 @@ export function EpicView({
   onItemSelect,
   onRefresh,
   onEdit,
+  onToggleArchive,
   onRemoveItem,
   onReorder,
 }: Props) {
@@ -93,42 +95,47 @@ export function EpicView({
   return (
     <div className="main epic-view">
       <header className="header epic-header">
-        <div className="header-title">
-          <h1 className="app-title epic-title">
-            {epic.color && (
-              <span className="epic-title-chip" style={{ backgroundColor: `#${epic.color}` }} />
-            )}
-            {epic.name}
-          </h1>
-          <div className="epic-progress">
-            <div className="epic-progress-bar">
-              <div
-                className="epic-progress-fill"
-                style={{
-                  width: `${progressPct}%`,
-                  backgroundColor: epic.color ? `#${epic.color}` : "var(--accent)",
-                }}
-              />
-            </div>
-            <span className="epic-progress-text">
-              {epic.doneCount}/{epic.itemCount}
-            </span>
-          </div>
-          {epic.note && <p className="epic-note fg-muted">{epic.note}</p>}
-        </div>
-        <div className="header-right">
-          <button className="btn" onClick={onRefresh} disabled={refreshing}>
-            {refreshing ? t("common.updating") : t("common.refresh")}
-          </button>
-          <button className="btn" onClick={onEdit}>
-            {t("common.edit")}
-          </button>
-          {viewer && (
-            <span className="viewer">
-              <img src={viewer.avatarUrl} alt="" className="avatar" />
-              {viewer.login}
-            </span>
+        <h1 className="app-title epic-title epic-title-row">
+          {epic.color && (
+            <span className="epic-title-chip" style={{ backgroundColor: `#${epic.color}` }} />
           )}
+          {epic.name}
+        </h1>
+        <div className="epic-header-body">
+          <div className="header-title">
+            <div className="epic-progress">
+              <div className="epic-progress-bar">
+                <div
+                  className="epic-progress-fill"
+                  style={{
+                    width: `${progressPct}%`,
+                    backgroundColor: epic.color ? `#${epic.color}` : "var(--accent)",
+                  }}
+                />
+              </div>
+              <span className="epic-progress-text">
+                {epic.doneCount}/{epic.itemCount}
+              </span>
+            </div>
+            {epic.note && <p className="epic-note fg-muted">{epic.note}</p>}
+          </div>
+          <div className="header-right">
+            <button className="btn" onClick={onRefresh} disabled={refreshing}>
+              {refreshing ? t("common.updating") : t("common.refresh")}
+            </button>
+            <button className="btn" onClick={onEdit}>
+              {t("common.edit")}
+            </button>
+            <button className="btn" onClick={onToggleArchive}>
+              {epic.archived ? t("epic.unarchive") : t("epic.archive")}
+            </button>
+            {viewer && (
+              <span className="viewer">
+                <img src={viewer.avatarUrl} alt="" className="avatar" />
+                {viewer.login}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 

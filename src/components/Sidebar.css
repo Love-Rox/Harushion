@@ -270,3 +270,7 @@
 .settings-modal-actions {
   justify-content: flex-end;
 }
+
+.epic-row.archived .epic-name {
+  opacity: 0.55;
+}

@@ -42,6 +42,7 @@ export const ja = {
     folderColor: "フォルダの色",
     epicsSectionTitle: "エピック",
     epicsEmpty: "エピックがありません",
+    archivedEpics: "アーカイブ済み",
     addEpic: "+ エピック",
     graphSectionTitle: "ブランチグラフ",
     graphEmpty: "リポジトリがありません",
@@ -204,6 +205,8 @@ export const ja = {
     suggestionLabel: "{milestone} — {repo} ({count}件)",
     createFromSuggestion: "作成",
     emptyItems: "アイテムがありません。詳細ペインの「エピックに追加」から追加できます",
+    archive: "アーカイブ",
+    unarchive: "復元",
   },
 };
 

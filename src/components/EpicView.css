@@ -162,3 +162,30 @@
 .epic-item-remove:hover {
   color: var(--closed);
 }
+
+/* タイトルは独立行(長いタイトルでもヘッダーが崩れない) */
+.epic-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.epic-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.epic-header-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.epic-header-body .header-right {
+  margin-left: auto;
+}

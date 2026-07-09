@@ -150,6 +150,7 @@ export type Epic = {
   note: string | null;
   color: string | null; // hex without '#', same palette as streams (COLOR_PALETTE)
   position: number;
+  archived: boolean;
   itemCount: number;
   doneCount: number; // state CLOSED or MERGED
 };

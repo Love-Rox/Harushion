@@ -51,6 +51,7 @@ pub struct Epic {
     pub note: Option<String>,
     pub color: Option<String>,
     pub position: i64,
+    pub archived: bool,
     pub item_count: i64,
     pub done_count: i64,
 }
@@ -141,7 +142,8 @@ CREATE TABLE IF NOT EXISTS epics (
   name TEXT NOT NULL,
   note TEXT,
   color TEXT,
-  position INTEGER NOT NULL DEFAULT 0
+  position INTEGER NOT NULL DEFAULT 0,
+  archived INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS epic_items (
@@ -246,6 +248,7 @@ impl Db {
         let _ = conn.execute("ALTER TABLE streams ADD COLUMN color TEXT", []);
         let _ = conn.execute("ALTER TABLE items ADD COLUMN milestone TEXT", []);
         let _ = conn.execute("ALTER TABLE items ADD COLUMN assignees TEXT NOT NULL DEFAULT ''", []);
+        let _ = conn.execute("ALTER TABLE epics ADD COLUMN archived INTEGER NOT NULL DEFAULT 0", []);
 
         // 初回起動時のシード Stream
         let count: i64 = conn
@@ -710,11 +713,11 @@ impl Db {
         let conn = self.lock();
         let mut stmt = conn
             .prepare(
-                "SELECT e.id, e.name, e.note, e.color, e.position,
+                "SELECT e.id, e.name, e.note, e.color, e.position, e.archived,
                    (SELECT COUNT(*) FROM epic_items ei WHERE ei.epic_id = e.id),
                    (SELECT COUNT(*) FROM epic_items ei JOIN items i ON i.url = ei.item_url
                      WHERE ei.epic_id = e.id AND i.state IN ('CLOSED', 'MERGED'))
-                 FROM epics e ORDER BY e.position, e.id",
+                 FROM epics e ORDER BY e.archived, e.position, e.id",
             )
             .map_err(db_err)?;
         let rows = stmt
@@ -728,7 +731,7 @@ impl Db {
     pub fn get_epic(&self, id: i64) -> Result<Epic, String> {
         let conn = self.lock();
         conn.query_row(
-            "SELECT e.id, e.name, e.note, e.color, e.position,
+            "SELECT e.id, e.name, e.note, e.color, e.position, e.archived,
                (SELECT COUNT(*) FROM epic_items ei WHERE ei.epic_id = e.id),
                (SELECT COUNT(*) FROM epic_items ei JOIN items i ON i.url = ei.item_url
                  WHERE ei.epic_id = e.id AND i.state IN ('CLOSED', 'MERGED'))
@@ -767,6 +770,16 @@ impl Db {
             "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)
                AND url NOT IN (SELECT item_url FROM epic_items)",
             [],
+        )
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn set_epic_archived(&self, id: i64, archived: bool) -> Result<(), String> {
+        let conn = self.lock();
+        conn.execute(
+            "UPDATE epics SET archived = ?2 WHERE id = ?1",
+            params![id, archived],
         )
         .map_err(db_err)?;
         Ok(())
@@ -1012,8 +1025,9 @@ fn row_to_epic(row: &rusqlite::Row<'_>) -> rusqlite::Result<Epic> {
         note: row.get(2)?,
         color: row.get(3)?,
         position: row.get(4)?,
-        item_count: row.get(5)?,
-        done_count: row.get(6)?,
+        archived: row.get(5)?,
+        item_count: row.get(6)?,
+        done_count: row.get(7)?,
     })
 }
 
@@ -1416,6 +1430,21 @@ mod tests {
         let conn = db.lock();
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn epic_archive_toggle() {
+        let db = test_db();
+        let eid = db.create_epic("e", None, None).unwrap();
+        assert!(!db.get_epic(eid).unwrap().archived);
+        db.set_epic_archived(eid, true).unwrap();
+        assert!(db.get_epic(eid).unwrap().archived);
+        // アーカイブは末尾に並ぶ
+        let e2 = db.create_epic("f", None, None).unwrap();
+        let ids: Vec<i64> = db.list_epics().unwrap().into_iter().map(|e| e.id).collect();
+        assert_eq!(ids, [e2, eid]);
+        db.set_epic_archived(eid, false).unwrap();
+        assert!(!db.get_epic(eid).unwrap().archived);
     }
 
     #[test]

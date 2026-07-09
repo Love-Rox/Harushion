@@ -76,6 +76,7 @@ export function Sidebar({
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [colorPopoverFolder, setColorPopoverFolder] = useState<string | null>(null);
+  const [archivedOpen, setArchivedOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
   const [confirmDeleteEpicId, setConfirmDeleteEpicId] = useState<number | null>(null);
@@ -401,63 +402,97 @@ export function Sidebar({
       <div className="sidebar-epics-section">
         <div className="sidebar-section-title">{t("sidebar.epicsSectionTitle")}</div>
         {epics.length === 0 && <p className="sidebar-epics-empty">{t("sidebar.epicsEmpty")}</p>}
-        {epics.map((epic) => {
-          const confirming = confirmDeleteEpicId === epic.id;
-          const full = epic.itemCount > 0 && epic.doneCount === epic.itemCount;
-          return (
-            <div key={epic.id} className="epic-row-wrap">
-              <div
-                className={`epic-row${epic.id === activeEpicId ? " active" : ""}`}
-                onClick={() => onSelectEpic(epic.id)}
-              >
-                {epic.color && (
-                  <span className="epic-color-chip" style={{ backgroundColor: `#${epic.color}` }} />
-                )}
-                <span className="epic-name">{epic.name}</span>
-                <span className={`epic-progress-badge${full ? " full" : ""}`}>
-                  {epic.doneCount}/{epic.itemCount}
-                </span>
-                {confirming ? (
-                  <span className="epic-delete-confirm" onClick={(e) => e.stopPropagation()}>
+        {epics
+          .filter((e) => !e.archived)
+          .map((epic) => {
+            const confirming = confirmDeleteEpicId === epic.id;
+            const full = epic.itemCount > 0 && epic.doneCount === epic.itemCount;
+            return (
+              <div key={epic.id} className="epic-row-wrap">
+                <div
+                  className={`epic-row${epic.id === activeEpicId ? " active" : ""}`}
+                  onClick={() => onSelectEpic(epic.id)}
+                >
+                  {epic.color && (
+                    <span
+                      className="epic-color-chip"
+                      style={{ backgroundColor: `#${epic.color}` }}
+                    />
+                  )}
+                  <span className="epic-name">{epic.name}</span>
+                  <span className={`epic-progress-badge${full ? " full" : ""}`}>
+                    {epic.doneCount}/{epic.itemCount}
+                  </span>
+                  {confirming ? (
+                    <span className="epic-delete-confirm" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="epic-delete-confirm-btn"
+                        title={t("modal.deleteConfirm")}
+                        disabled={deletingEpic}
+                        onClick={() => void handleConfirmDeleteEpic(epic.id)}
+                      >
+                        ✓
+                      </button>
+                      <button
+                        type="button"
+                        className="epic-delete-cancel-btn"
+                        title={t("common.cancel")}
+                        disabled={deletingEpic}
+                        onClick={() => setConfirmDeleteEpicId(null)}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ) : (
                     <button
-                      type="button"
-                      className="epic-delete-confirm-btn"
-                      title={t("modal.deleteConfirm")}
-                      disabled={deletingEpic}
-                      onClick={() => void handleConfirmDeleteEpic(epic.id)}
-                    >
-                      ✓
-                    </button>
-                    <button
-                      type="button"
-                      className="epic-delete-cancel-btn"
-                      title={t("common.cancel")}
-                      disabled={deletingEpic}
-                      onClick={() => setConfirmDeleteEpicId(null)}
+                      className="epic-delete"
+                      title={t("common.delete")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEpicDeleteError(null);
+                        setConfirmDeleteEpicId(epic.id);
+                      }}
                     >
                       ✕
                     </button>
-                  </span>
-                ) : (
-                  <button
-                    className="epic-delete"
-                    title={t("common.delete")}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEpicDeleteError(null);
-                      setConfirmDeleteEpicId(epic.id);
-                    }}
-                  >
-                    ✕
-                  </button>
+                  )}
+                </div>
+                {confirming && epicDeleteError && (
+                  <p className="graph-add-error epic-delete-error">{epicDeleteError}</p>
                 )}
               </div>
-              {confirming && epicDeleteError && (
-                <p className="graph-add-error epic-delete-error">{epicDeleteError}</p>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        {epics.some((e) => e.archived) && (
+          <div className="stream-folder">
+            <button className="folder-header" onClick={() => setArchivedOpen((v) => !v)}>
+              <span className={`folder-arrow${archivedOpen ? "" : " collapsed"}`}>▾</span>
+              {t("sidebar.archivedEpics")} ({epics.filter((e) => e.archived).length})
+            </button>
+            {archivedOpen &&
+              epics
+                .filter((e) => e.archived)
+                .map((epic) => (
+                  <div
+                    key={epic.id}
+                    className={`epic-row archived${epic.id === activeEpicId ? " active" : ""}`}
+                    onClick={() => onSelectEpic(epic.id)}
+                  >
+                    {epic.color && (
+                      <span
+                        className="epic-color-chip"
+                        style={{ backgroundColor: `#${epic.color}` }}
+                      />
+                    )}
+                    <span className="epic-name">{epic.name}</span>
+                    <span className="epic-progress-badge">
+                      {epic.doneCount}/{epic.itemCount}
+                    </span>
+                  </div>
+                ))}
+          </div>
+        )}
         <button className="sidebar-add" onClick={onCreateEpic}>
           {t("sidebar.addEpic")}
         </button>

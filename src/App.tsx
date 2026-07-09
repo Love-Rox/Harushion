@@ -169,6 +169,15 @@ function App() {
     }
   }, []);
 
+  const handleToggleEpicArchive = async (epic: Epic) => {
+    try {
+      await invoke<Epic>("set_epic_archived", { id: epic.id, archived: !epic.archived });
+      await loadEpics();
+    } catch (e) {
+      setEpicError(String(e));
+    }
+  };
+
   const toggleEpicMembership = async (epicId: number, itemUrl: string, isMember: boolean) => {
     await invoke<void>(isMember ? "remove_epic_item" : "add_epic_item", { epicId, itemUrl });
     const jobs: Promise<unknown>[] = [loadEpics()];
@@ -749,6 +758,7 @@ function App() {
               onItemSelect={(item) => void handleSelectItem(item)}
               onRefresh={() => void handleRefreshEpicItems(view.epicId)}
               onEdit={() => openEpic && openEpicEditModal(openEpic)}
+              onToggleArchive={() => void handleToggleEpicArchive(openEpic!)}
               onRemoveItem={(url) => void handleRemoveEpicItem(view.epicId, url)}
               onReorder={(urls) => void handleReorderEpicItems(view.epicId, urls)}
             />

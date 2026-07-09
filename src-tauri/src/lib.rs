@@ -215,6 +215,12 @@ fn create_epic_from_milestone(db: State<'_, Db>, milestone: String, repo: String
 }
 
 #[tauri::command]
+fn set_epic_archived(db: State<'_, Db>, id: i64, archived: bool) -> Result<Epic, String> {
+    db.set_epic_archived(id, archived)?;
+    db.get_epic(id)
+}
+
+#[tauri::command]
 fn item_epic_ids(db: State<'_, Db>, item_url: String) -> Result<Vec<i64>, String> {
     db.item_epic_ids(&item_url)
 }
@@ -372,7 +378,8 @@ pub fn run() {
             suggest_epics,
             create_epic_from_milestone,
             item_epic_ids,
-            refresh_epic_items
+            refresh_epic_items,
+            set_epic_archived
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

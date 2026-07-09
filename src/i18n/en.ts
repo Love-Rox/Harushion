@@ -43,6 +43,7 @@ export const en: Messages = {
     folderColor: "Folder color",
     epicsSectionTitle: "Epics",
     epicsEmpty: "No epics",
+    archivedEpics: "Archived",
     addEpic: "+ Epic",
     graphSectionTitle: "Branch graph",
     graphEmpty: "No repositories",
@@ -205,5 +206,7 @@ export const en: Messages = {
     suggestionLabel: "{milestone} — {repo} ({count} items)",
     createFromSuggestion: "Create",
     emptyItems: 'No items yet. Add them from "Add to epic" in the detail pane.',
+    archive: "Archive",
+    unarchive: "Restore",
   },
 };
