@@ -1,5 +1,6 @@
 import type { Item, Stream, Viewer } from "../types";
 import { relativeTime } from "./format";
+import { StateBadge } from "./StateBadge";
 
 type Props = {
   stream: Stream | null;
@@ -18,17 +19,6 @@ type Props = {
   onToggleRead: (item: Item) => void;
   onCreateStream: () => void;
 };
-
-function stateLabel(item: Item): { text: string; className: string } {
-  if (item.kind === "pr") {
-    if (item.state === "MERGED") return { text: "Merged", className: "state-merged" };
-    if (item.state === "CLOSED") return { text: "Closed", className: "state-closed" };
-    if (item.isDraft) return { text: "Draft", className: "state-draft" };
-    return { text: "Open", className: "state-open" };
-  }
-  if (item.state === "CLOSED") return { text: "Closed", className: "state-closed" };
-  return { text: "Open", className: "state-open" };
-}
 
 export function ItemList({
   stream,
@@ -96,7 +86,6 @@ export function ItemList({
         {!error && stream && !loading && items.length === 0 && <p className="empty">アイテムがありません</p>}
         {stream &&
           items.map((item) => {
-            const state = stateLabel(item);
             const selected = item.url === selectedItemUrl;
             return (
               <div
@@ -122,7 +111,7 @@ export function ItemList({
                       {item.comments > 0 && <> · 💬{item.comments}</>}
                     </span>
                   </span>
-                  <span className={`state ${state.className}`}>{state.text}</span>
+                  <StateBadge kind={item.kind} state={item.state} isDraft={item.isDraft} />
                 </button>
                 <button
                   className="item-open-browser"

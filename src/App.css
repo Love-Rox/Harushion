@@ -447,10 +447,22 @@ body {
   text-overflow: ellipsis;
 }
 
-.state {
+.state-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
   font-size: 12px;
   font-weight: 600;
+}
+
+.state-badge svg {
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+.state-done {
+  color: var(--merged);
 }
 
 .state-open {

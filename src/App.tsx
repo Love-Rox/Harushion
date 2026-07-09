@@ -168,6 +168,10 @@ function App() {
     void openUrl(url);
   };
 
+  const handleOpenInApp = (url: string) => {
+    invoke<void>("open_in_app_browser", { url }).catch((e) => setDetailError(String(e)));
+  };
+
   const loadRepoLabels = useCallback(
     async (repo: string): Promise<LabelInfo[]> => {
       const cached = repoLabels[repo];
@@ -310,6 +314,7 @@ function App() {
           onAction={handleAction}
           onDismissError={() => setDetailError(null)}
           onOpenUrl={handleOpenUrl}
+          onOpenInApp={handleOpenInApp}
           loadRepoLabels={loadRepoLabels}
         />
       </div>

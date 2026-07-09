@@ -1,3 +1,4 @@
+mod browser;
 mod db;
 mod gh;
 mod github;
@@ -86,6 +87,11 @@ async fn list_repo_labels(repo: String) -> Result<Vec<LabelInfo>, String> {
 }
 
 #[tauri::command]
+async fn open_in_app_browser(app: AppHandle, url: String) -> Result<(), String> {
+    browser::open_github(&app, &url).await
+}
+
+#[tauri::command]
 async fn poll_stream_now(app: AppHandle, stream_id: i64) -> Result<usize, String> {
     let stream = app.state::<Db>().get_due_stream(stream_id)?;
     // 手動更新はユーザーが画面を見ているので OS 通知しない
@@ -105,6 +111,22 @@ pub fn run() {
                 .map_err(std::io::Error::other)?;
             app.manage(db);
             poller::spawn(app.handle().clone());
+
+            // 起動スモーク用フック: ウィンドウ生成→navigate の実経路を CI 外で確認する
+            if std::env::var("GITVIEWER_SMOKE_BROWSER").is_ok() {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match browser::open_github(&handle, "https://github.com/Love-Rox/GitViewer").await {
+                        Ok(()) => eprintln!("[smoke] browser window created"),
+                        Err(e) => eprintln!("[smoke] browser create FAILED: {e}"),
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    match browser::open_github(&handle, "https://github.com/tauri-apps/tauri").await {
+                        Ok(()) => eprintln!("[smoke] browser navigate ok"),
+                        Err(e) => eprintln!("[smoke] browser navigate FAILED: {e}"),
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -120,7 +142,8 @@ pub fn run() {
             poll_stream_now,
             get_item_detail,
             item_action,
-            list_repo_labels
+            list_repo_labels,
+            open_in_app_browser
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

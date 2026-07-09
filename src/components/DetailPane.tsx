@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { Item, ItemAction, ItemDetail, LabelInfo, MergeMethod, Viewer } from "../types";
 import { relativeTime } from "./format";
+import { StateBadge } from "./StateBadge";
 
 type Props = {
   item: Item | null;
@@ -14,19 +15,9 @@ type Props = {
   onAction: (action: ItemAction) => Promise<boolean>;
   onDismissError: () => void;
   onOpenUrl: (url: string) => void;
+  onOpenInApp: (url: string) => void;
   loadRepoLabels: (repo: string) => Promise<LabelInfo[]>;
 };
-
-function detailStateLabel(detail: ItemDetail): { text: string; className: string } {
-  if (detail.kind === "pr") {
-    if (detail.state === "MERGED") return { text: "Merged", className: "state-merged" };
-    if (detail.state === "CLOSED") return { text: "Closed", className: "state-closed" };
-    if (detail.isDraft) return { text: "Draft", className: "state-draft" };
-    return { text: "Open", className: "state-open" };
-  }
-  if (detail.state === "CLOSED") return { text: "Closed", className: "state-closed" };
-  return { text: "Open", className: "state-open" };
-}
 
 function mergeableLabel(mergeable: string): string {
   if (mergeable === "MERGEABLE") return "マージ可能";
@@ -95,6 +86,7 @@ export function DetailPane({
   onAction,
   onDismissError,
   onOpenUrl,
+  onOpenInApp,
   loadRepoLabels,
 }: Props) {
   const [commentText, setCommentText] = useState("");
@@ -158,7 +150,6 @@ export function DetailPane({
     );
   }
 
-  const state = detailStateLabel(detail);
   const isAssignedToMe = viewer != null && detail.assignees.includes(viewer.login);
   const isPending = (key: string) => actionPending && pendingActionKey === key;
   const label = (base: string, key: string) => (isPending(key) ? `${base}中…` : base);
@@ -399,13 +390,16 @@ export function DetailPane({
           </div>
           <div className="detail-header-meta">
             <span className="detail-repo">{detail.repo}</span>
-            <span className={`state ${state.className}`}>{state.text}</span>
+            <StateBadge kind={detail.kind} state={detail.state} isDraft={detail.isDraft} size={16} />
             {detail.authorAvatar && <img src={detail.authorAvatar} className="avatar" alt="" />}
             {detail.author && <span>{detail.author}</span>}
             <span className="detail-time">
               作成 {relativeTime(detail.createdAt)} · 更新 {relativeTime(detail.updatedAt)}
             </span>
             {detail.milestone && <span className="milestone-chip">🎯 {detail.milestone}</span>}
+            <button className="btn btn-primary detail-open-browser-btn" onClick={() => onOpenInApp(detail.url)}>
+              アプリ内で開く
+            </button>
             <button className="btn detail-open-browser-btn" onClick={() => onOpenUrl(detail.url)}>
               ブラウザで開く
             </button>
