@@ -171,6 +171,8 @@ body {
 
 .sidebar-add {
   flex-shrink: 0;
+  display: block;
+  width: calc(100% - 16px);
   margin: 8px;
   padding: 6px 0;
   background: var(--bg-panel);

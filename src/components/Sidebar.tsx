@@ -3,10 +3,7 @@ import type { CSSProperties, DragEvent, FormEvent } from "react";
 import { COLOR_PALETTE } from "../types";
 import type { Epic, Stream } from "../types";
 import { useI18n } from "../i18n";
-import type { Locale } from "../i18n";
 import "./Sidebar.css";
-import { getThemePreference, setThemePreference } from "../theme";
-import type { ThemePreference } from "../theme";
 
 type Props = {
   streams: Stream[];
@@ -23,6 +20,7 @@ type Props = {
   activeEpicId: number | null;
   onSelectEpic: (id: number) => void;
   onCreateEpic: () => void;
+  onOpenSettings: () => void;
   onDeleteEpic: (id: number) => Promise<void>;
   graphRepos: string[];
   activeGraphRepo: string | null;
@@ -63,6 +61,7 @@ export function Sidebar({
   activeEpicId,
   onSelectEpic,
   onCreateEpic,
+  onOpenSettings,
   onDeleteEpic,
   graphRepos,
   activeGraphRepo,
@@ -70,14 +69,13 @@ export function Sidebar({
   onAddGraphRepo,
   onRemoveGraphRepo,
 }: Props) {
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [addFormOpen, setAddFormOpen] = useState(false);
   const [addValue, setAddValue] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [colorPopoverFolder, setColorPopoverFolder] = useState<string | null>(null);
-  const [theme, setTheme] = useState<ThemePreference>(getThemePreference());
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
   const [confirmDeleteEpicId, setConfirmDeleteEpicId] = useState<number | null>(null);
@@ -526,35 +524,9 @@ export function Sidebar({
         )}
       </div>
 
-      <div className="sidebar-locale-switcher">
-        <label className="sidebar-locale-label" htmlFor="sidebar-locale-select">
-          {t("sidebar.localeLabel")}
-        </label>
-        <select
-          id="sidebar-locale-select"
-          value={locale}
-          onChange={(e) => setLocale(e.target.value as Locale)}
-        >
-          <option value="ja">日本語</option>
-          <option value="en">English</option>
-        </select>
-        <label className="sidebar-locale-label" htmlFor="sidebar-theme-select">
-          {t("sidebar.themeLabel")}
-        </label>
-        <select
-          id="sidebar-theme-select"
-          value={theme}
-          onChange={(e) => {
-            const next = e.target.value as ThemePreference;
-            setThemePreference(next);
-            setTheme(next);
-          }}
-        >
-          <option value="system">{t("sidebar.themeSystem")}</option>
-          <option value="light">{t("sidebar.themeLight")}</option>
-          <option value="dark">{t("sidebar.themeDark")}</option>
-        </select>
-      </div>
+      <button className="sidebar-settings-btn" onClick={onOpenSettings}>
+        ⚙ {t("sidebar.settings")}
+      </button>
     </aside>
   );
 }

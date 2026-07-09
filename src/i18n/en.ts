@@ -3,6 +3,9 @@ import type { Messages } from "./ja";
 // 英語辞書。Messages 型 (ja.ts から派生) として型付けすることで、
 // キーの過不足はコンパイルエラーになる。
 export const en: Messages = {
+  settings: {
+    title: "Settings",
+  },
   common: {
     add: "Add",
     cancel: "Cancel",
@@ -50,6 +53,7 @@ export const en: Messages = {
     themeSystem: "System",
     themeLight: "Light",
     themeDark: "Dark",
+    settings: "Settings",
   },
   list: {
     unreadOnly: "Unread only",

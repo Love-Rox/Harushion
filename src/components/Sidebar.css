@@ -246,3 +246,27 @@
   outline: none;
   border-color: var(--accent);
 }
+
+.sidebar-settings-btn {
+  flex-shrink: 0;
+  display: block;
+  width: calc(100% - 16px);
+  margin: 8px;
+  padding: 6px 0;
+  background: none;
+  color: var(--fg-muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.sidebar-settings-btn:hover {
+  border-color: var(--border);
+  color: var(--fg);
+}
+
+.settings-modal-actions {
+  justify-content: flex-end;
+}

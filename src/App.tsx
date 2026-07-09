@@ -17,6 +17,7 @@ import type {
   Viewer,
 } from "./types";
 import { Sidebar } from "./components/Sidebar";
+import { SettingsModal } from "./components/SettingsModal";
 import { StreamModal } from "./components/StreamModal";
 import type {
   StreamCreateInput,
@@ -61,6 +62,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingStream, setEditingStream] = useState<Stream | null>(null);
   const [folderColors, setFolderColors] = useState<Record<string, string>>({});
@@ -704,6 +706,7 @@ function App() {
           activeEpicId={view.type === "epic" ? view.epicId : null}
           onSelectEpic={handleSelectEpic}
           onCreateEpic={openEpicCreateModal}
+          onOpenSettings={() => setSettingsOpen(true)}
           onDeleteEpic={handleDeleteEpic}
           graphRepos={graphRepos}
           activeGraphRepo={view.type === "graph" ? view.repo : null}
@@ -764,6 +767,7 @@ function App() {
           />
         )}
       </div>
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {modalOpen && (
         <StreamModal
           stream={editingStream}

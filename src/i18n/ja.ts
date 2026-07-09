@@ -1,6 +1,9 @@
 // 日本語辞書。この辞書の型 (Messages) が英語辞書の型として強制されるため、
 // キーの過不足はコンパイルエラーになる。
 export const ja = {
+  settings: {
+    title: "設定",
+  },
   common: {
     add: "追加",
     cancel: "キャンセル",
@@ -49,6 +52,7 @@ export const ja = {
     themeSystem: "システム",
     themeLight: "ライト",
     themeDark: "ダーク",
+    settings: "設定",
   },
   list: {
     unreadOnly: "未読のみ",
