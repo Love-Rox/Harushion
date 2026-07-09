@@ -1,6 +1,10 @@
+import { useEffect, useRef, useState } from "react";
 import type { Item, Stream, Viewer } from "../types";
 import { relativeTime } from "./format";
 import { StateBadge } from "./StateBadge";
+
+/** 無限スクロールの1ページあたりの描画件数 */
+const RENDER_PAGE = 50;
 
 type Props = {
   stream: Stream | null;
@@ -37,6 +41,30 @@ export function ItemList({
   onToggleRead,
   onCreateStream,
 }: Props) {
+  const [renderCount, setRenderCount] = useState(RENDER_PAGE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Stream やフィルタが変わったら先頭ページに戻す
+  useEffect(() => {
+    setRenderCount(RENDER_PAGE);
+  }, [stream?.id, unreadOnly]);
+
+  // 末尾の番兵が見えたら次のページを描画する
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setRenderCount((c) => c + RENDER_PAGE);
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [items.length, renderCount]);
+
   return (
     <div className="main">
       <header className="header">
@@ -87,7 +115,7 @@ export function ItemList({
           <p className="empty">アイテムがありません</p>
         )}
         {stream &&
-          items.map((item) => {
+          items.slice(0, renderCount).map((item) => {
             const selected = item.url === selectedItemUrl;
             return (
               <div
@@ -133,6 +161,9 @@ export function ItemList({
               </div>
             );
           })}
+        {stream && renderCount < items.length && (
+          <div ref={sentinelRef} className="list-sentinel" aria-hidden="true" />
+        )}
       </main>
     </div>
   );

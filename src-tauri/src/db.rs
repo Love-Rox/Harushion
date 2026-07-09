@@ -111,6 +111,77 @@ fn db_err(e: rusqlite::Error) -> String {
     format!("データベースエラー: {e}")
 }
 
+/// 検索クエリのうち、保存済みアイテムの列だけでローカル判定できる条件。
+/// GitHub 検索は「合致しなくなったアイテム」を教えてくれないため、状態が変わった
+/// アイテム(マージ済み等)を Stream から外す掃除にこの判定を使う。
+#[derive(Debug, Default, PartialEq)]
+pub struct LocalFilters {
+    kind: Option<String>,  // "issue" | "pr"
+    state: Option<String>, // "open" | "closed" | "merged" | "unmerged"
+    exclude_draft: bool,
+    repos: Vec<String>, // 小文字。複数は OR
+    orgs: Vec<String>,  // 小文字。複数は OR
+}
+
+pub fn parse_local_filters(query: &str) -> LocalFilters {
+    let mut f = LocalFilters::default();
+    for token in query.split_whitespace() {
+        let t = token.to_lowercase();
+        match t.as_str() {
+            "is:issue" | "type:issue" => f.kind = Some("issue".into()),
+            "is:pr" | "type:pr" => f.kind = Some("pr".into()),
+            "is:open" | "state:open" => f.state = Some("open".into()),
+            "is:closed" | "state:closed" => f.state = Some("closed".into()),
+            "is:merged" => f.state = Some("merged".into()),
+            "is:unmerged" => f.state = Some("unmerged".into()),
+            "-is:draft" => f.exclude_draft = true,
+            _ => {
+                if let Some(r) = t.strip_prefix("repo:") {
+                    f.repos.push(r.to_string());
+                } else if let Some(o) = t.strip_prefix("org:").or_else(|| t.strip_prefix("user:")) {
+                    f.orgs.push(o.to_string());
+                }
+            }
+        }
+    }
+    f
+}
+
+impl LocalFilters {
+    /// アイテムがこの条件に「確実に違反」しているか。判定できない条件は違反にしない。
+    fn violates(&self, kind: &str, state: &str, is_draft: bool, repo: &str) -> bool {
+        if let Some(k) = &self.kind {
+            if k != kind {
+                return true;
+            }
+        }
+        if let Some(s) = &self.state {
+            let ok = match s.as_str() {
+                "open" => state == "OPEN",
+                // GitHub の is:closed はマージ済み PR を含む
+                "closed" => state == "CLOSED" || state == "MERGED",
+                "merged" => state == "MERGED",
+                "unmerged" => state != "MERGED",
+                _ => true,
+            };
+            if !ok {
+                return true;
+            }
+        }
+        if self.exclude_draft && is_draft {
+            return true;
+        }
+        let repo_lc = repo.to_lowercase();
+        if !self.repos.is_empty() && !self.repos.contains(&repo_lc) {
+            return true;
+        }
+        if !self.orgs.is_empty() && !self.orgs.iter().any(|o| repo_lc.starts_with(&format!("{o}/"))) {
+            return true;
+        }
+        false
+    }
+}
+
 impl Db {
     pub fn open(path: &Path) -> Result<Self, String> {
         let conn = Connection::open(path).map_err(db_err)?;
@@ -479,6 +550,91 @@ impl Db {
         Ok(())
     }
 
+    /// Stream のクエリに確実に合致しなくなったアイテムのリンクを外し、外した件数を返す。
+    pub fn prune_stream_links(&self, stream_id: i64, query: &str) -> Result<usize, String> {
+        let filters = parse_local_filters(query);
+        if filters == LocalFilters::default() {
+            return Ok(0); // ローカル判定できる条件がない
+        }
+        let conn = self.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT i.url, i.kind, i.state, i.is_draft, i.repo FROM items i
+                 JOIN stream_items si ON si.item_url = i.url
+                 WHERE si.stream_id = ?1",
+            )
+            .map_err(db_err)?;
+        let rows: Vec<(String, String, String, bool, String)> = stmt
+            .query_map(params![stream_id], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+            })
+            .map_err(db_err)?
+            .collect::<Result<_, _>>()
+            .map_err(db_err)?;
+        drop(stmt);
+
+        let to_remove: Vec<&String> = rows
+            .iter()
+            .filter(|(_, kind, state, is_draft, repo)| filters.violates(kind, state, *is_draft, repo))
+            .map(|(url, ..)| url)
+            .collect();
+        for url in &to_remove {
+            conn.execute(
+                "DELETE FROM stream_items WHERE stream_id = ?1 AND item_url = ?2",
+                params![stream_id, url],
+            )
+            .map_err(db_err)?;
+        }
+        if !to_remove.is_empty() {
+            conn.execute(
+                "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)",
+                [],
+            )
+            .map_err(db_err)?;
+        }
+        Ok(to_remove.len())
+    }
+
+    /// 詳細取得などで判明したアイテムの最新状態を反映し、
+    /// 合致しなくなった Stream からリンクを掃除して、掃除した Stream の id を返す。
+    pub fn refresh_item_state(
+        &self,
+        url: &str,
+        state: &str,
+        is_draft: bool,
+    ) -> Result<Vec<i64>, String> {
+        let linked: Vec<(i64, String)> = {
+            let conn = self.lock();
+            // updated_at には触れない(未読状態を変えないため)
+            conn.execute(
+                "UPDATE items SET state = ?2, is_draft = ?3 WHERE url = ?1",
+                params![url, state, is_draft],
+            )
+            .map_err(db_err)?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT s.id, s.query FROM streams s
+                     JOIN stream_items si ON si.stream_id = s.id
+                     WHERE si.item_url = ?1",
+                )
+                .map_err(db_err)?;
+            let rows = stmt
+                .query_map(params![url], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map_err(db_err)?
+                .collect::<Result<_, _>>()
+                .map_err(db_err)?;
+            rows
+        };
+
+        let mut pruned_streams = Vec::new();
+        for (stream_id, query) in linked {
+            if self.prune_stream_links(stream_id, &query)? > 0 {
+                pruned_streams.push(stream_id);
+            }
+        }
+        Ok(pruned_streams)
+    }
+
     pub fn list_graph_repos(&self) -> Result<Vec<String>, String> {
         let conn = self.lock();
         let mut stmt = conn
@@ -704,6 +860,105 @@ mod tests {
         let due = db.due_streams(1060).unwrap();
         assert_eq!(due.len(), 1, "past interval");
         assert!(!due[0].first_poll);
+    }
+
+    fn pr_item(url: &str, state: &str, is_draft: bool, repo: &str) -> Item {
+        Item {
+            kind: "pr".into(),
+            number: 1,
+            title: format!("title of {url}"),
+            url: url.into(),
+            state: state.into(),
+            is_draft,
+            updated_at: "2026-07-09T00:00:00Z".into(),
+            author: None,
+            author_avatar: None,
+            repo: repo.into(),
+            comments: 0,
+        }
+    }
+
+    #[test]
+    fn prune_removes_merged_and_closed_from_open_stream() {
+        let db = test_db();
+        let id = db.create_stream("open-prs", "is:pr is:open repo:o/r sort:updated-desc", None, 60, None).unwrap();
+        db.upsert_items(
+            id,
+            &[
+                pr_item("u-open", "OPEN", false, "o/r"),
+                pr_item("u-merged", "MERGED", false, "o/r"),
+                pr_item("u-closed", "CLOSED", false, "o/r"),
+            ],
+        )
+        .unwrap();
+
+        let pruned = db.prune_stream_links(id, "is:pr is:open repo:o/r sort:updated-desc").unwrap();
+        assert_eq!(pruned, 2);
+        let urls: Vec<String> = db.list_items(id, false).unwrap().into_iter().map(|i| i.url).collect();
+        assert_eq!(urls, ["u-open"]);
+    }
+
+    #[test]
+    fn prune_is_closed_keeps_merged_prs() {
+        // GitHub の is:closed は merged を含むため merged は残す
+        let db = test_db();
+        let id = db.create_stream("closed", "is:closed", None, 60, None).unwrap();
+        db.upsert_items(
+            id,
+            &[
+                pr_item("u-merged", "MERGED", false, "o/r"),
+                pr_item("u-closed", "CLOSED", false, "o/r"),
+                pr_item("u-open", "OPEN", false, "o/r"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(db.prune_stream_links(id, "is:closed").unwrap(), 1);
+        let urls: Vec<String> = db.list_items(id, false).unwrap().into_iter().map(|i| i.url).collect();
+        assert!(urls.contains(&"u-merged".to_string()) && urls.contains(&"u-closed".to_string()));
+    }
+
+    #[test]
+    fn prune_respects_repo_org_and_draft_filters() {
+        let db = test_db();
+        let id = db.create_stream("s", "org:love-rox -is:draft", None, 60, None).unwrap();
+        db.upsert_items(
+            id,
+            &[
+                pr_item("u-ok", "OPEN", false, "Love-Rox/Harushion"),
+                pr_item("u-other-org", "OPEN", false, "other/repo"),
+                pr_item("u-draft", "OPEN", true, "Love-Rox/Harushion"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(db.prune_stream_links(id, "org:love-rox -is:draft").unwrap(), 2);
+        let urls: Vec<String> = db.list_items(id, false).unwrap().into_iter().map(|i| i.url).collect();
+        assert_eq!(urls, ["u-ok"]);
+    }
+
+    #[test]
+    fn prune_does_nothing_without_local_filters() {
+        let db = test_db();
+        let id = db.create_stream("s", "involves:@me sort:updated-desc", None, 60, None).unwrap();
+        db.upsert_items(id, &[pr_item("u1", "MERGED", false, "o/r")]).unwrap();
+        assert_eq!(db.prune_stream_links(id, "involves:@me sort:updated-desc").unwrap(), 0);
+        assert_eq!(db.list_items(id, false).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn refresh_item_state_prunes_streams_that_no_longer_match() {
+        let db = test_db();
+        let open_stream = db.create_stream("open", "is:pr is:open", None, 60, None).unwrap();
+        let all_stream = db.create_stream("all", "involves:@me", None, 60, None).unwrap();
+        db.upsert_items(open_stream, &[pr_item("u1", "OPEN", false, "o/r")]).unwrap();
+        db.upsert_items(all_stream, &[pr_item("u1", "OPEN", false, "o/r")]).unwrap();
+
+        // 詳細取得でマージ済みと判明 → open Stream からだけ外れる
+        let pruned = db.refresh_item_state("u1", "MERGED", false).unwrap();
+        assert_eq!(pruned, [open_stream]);
+        assert!(db.list_items(open_stream, false).unwrap().is_empty());
+        let all_items = db.list_items(all_stream, false).unwrap();
+        assert_eq!(all_items.len(), 1);
+        assert_eq!(all_items[0].state, "MERGED");
     }
 
     #[test]

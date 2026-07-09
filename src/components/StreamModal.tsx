@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { COLOR_PALETTE } from "../types";
@@ -205,6 +205,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
   const [duplicating, setDuplicating] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const overlayMouseDownRef = useRef(false);
 
   const [mode, setMode] = useState<"builder" | "manual">("builder");
   const [builder, setBuilder] = useState<QueryFormState>(() =>
@@ -341,7 +342,17 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onD
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div
+      className="modal-overlay"
+      onMouseDown={(e) => {
+        // モーダル内で始まったドラッグ(テキスト選択等)が外で mouseup しても
+        // 閉じないよう、mousedown がオーバーレイ自身で始まった場合のみ閉じる
+        overlayMouseDownRef.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && overlayMouseDownRef.current) onClose();
+      }}
+    >
       <div className="modal stream-modal" onClick={(e) => e.stopPropagation()}>
         <h2 className="modal-title">{stream ? "ストリームを編集" : "新しいストリーム"}</h2>
         <form onSubmit={handleSubmit}>

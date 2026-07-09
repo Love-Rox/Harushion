@@ -7,7 +7,9 @@ use crate::db::{Db, DueStream};
 use crate::github::{self, AppState};
 
 const TICK: Duration = Duration::from_secs(15);
-const FETCH_COUNT: u32 = 50;
+/// 1 回のポーリングで取得する検索結果の上限(50件/ページでページング)。
+/// レート消費と表示上限(500件)のバランスで 200 に設定。
+const MAX_FETCH: u32 = 200;
 
 fn unix_now() -> i64 {
     SystemTime::now()
@@ -43,17 +45,19 @@ async fn tick(app: &AppHandle) -> Result<(), String> {
 pub async fn poll_stream(app: &AppHandle, stream: &DueStream, notify: bool) -> Result<usize, String> {
     let items = {
         let gh = app.state::<AppState>();
-        github::search_items(&gh, &stream.query, FETCH_COUNT).await?
+        github::search_items(&gh, &stream.query, MAX_FETCH).await?
     };
 
     let db = app.state::<Db>();
     let fresh = db.upsert_items(stream.id, &items)?;
+    // マージ済み・クローズ済み等、クエリに確実に合致しなくなったアイテムのリンクを掃除
+    let pruned = db.prune_stream_links(stream.id, &stream.query)?;
     db.set_polled(stream.id, unix_now())?;
 
-    if !fresh.is_empty() {
+    if !fresh.is_empty() || pruned > 0 {
         let _ = app.emit("items-updated", serde_json::json!({ "streamId": stream.id }));
 
-        if notify && !stream.first_poll {
+        if notify && !stream.first_poll && !fresh.is_empty() {
             let body = match fresh.len() {
                 1 => fresh[0].clone(),
                 n => format!("{} 他{}件", fresh[0], n - 1),

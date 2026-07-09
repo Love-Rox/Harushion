@@ -8,7 +8,7 @@ mod poller;
 use db::{Db, StoredItem, Stream};
 use gh::ItemAction;
 use github::{AppState, ItemDetail, LabelInfo, Viewer};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[tauri::command]
 async fn get_viewer(state: State<'_, AppState>) -> Result<Viewer, String> {
@@ -120,8 +120,20 @@ fn mark_all_read(db: State<'_, Db>, stream_id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn get_item_detail(state: State<'_, AppState>, url: String) -> Result<ItemDetail, String> {
-    github::fetch_item_detail(&state, &url).await
+async fn get_item_detail(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<ItemDetail, String> {
+    let detail = github::fetch_item_detail(&state, &url).await?;
+    // 詳細で判明した最新状態を DB に反映し、合致しなくなった Stream からリンクを掃除
+    let pruned = app
+        .state::<Db>()
+        .refresh_item_state(&url, &detail.state, detail.is_draft)?;
+    for stream_id in pruned {
+        let _ = app.emit("items-updated", serde_json::json!({ "streamId": stream_id }));
+    }
+    Ok(detail)
 }
 
 #[tauri::command]

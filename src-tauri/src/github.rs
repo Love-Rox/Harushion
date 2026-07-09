@@ -134,8 +134,9 @@ pub async fn fetch_viewer(state: &AppState) -> Result<Viewer, String> {
 }
 
 const SEARCH_QUERY: &str = r#"
-query($q: String!, $first: Int!) {
-  search(query: $q, type: ISSUE, first: $first) {
+query($q: String!, $first: Int!, $after: String) {
+  search(query: $q, type: ISSUE, first: $first, after: $after) {
+    pageInfo { hasNextPage endCursor }
     nodes {
       __typename
       ... on Issue {
@@ -155,19 +156,31 @@ query($q: String!, $first: Int!) {
 }
 "#;
 
-pub async fn search_items(state: &AppState, query: &str, first: u32) -> Result<Vec<Item>, String> {
-    let data = state
-        .graphql(SEARCH_QUERY, json!({ "q": query, "first": first }))
-        .await?;
+const SEARCH_PAGE_SIZE: u32 = 50;
 
-    let nodes = data["search"]["nodes"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+/// 検索結果をカーソルでページングしながら最大 max_total 件まで取得する。
+pub async fn search_items(state: &AppState, query: &str, max_total: u32) -> Result<Vec<Item>, String> {
+    let mut items: Vec<Item> = Vec::new();
+    let mut after: Option<String> = None;
 
-    let items = nodes
-        .iter()
-        .filter_map(|node| {
+    loop {
+        let remaining = max_total.saturating_sub(items.len() as u32);
+        if remaining == 0 {
+            break;
+        }
+        let data = state
+            .graphql(
+                SEARCH_QUERY,
+                json!({ "q": query, "first": SEARCH_PAGE_SIZE.min(remaining), "after": after }),
+            )
+            .await?;
+
+        let nodes = data["search"]["nodes"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+
+        items.extend(nodes.iter().filter_map(|node| {
             let kind = match node["__typename"].as_str()? {
                 "Issue" => "issue",
                 "PullRequest" => "pr",
@@ -189,8 +202,17 @@ pub async fn search_items(state: &AppState, query: &str, first: u32) -> Result<V
                     .to_string(),
                 comments: node["comments"]["totalCount"].as_i64().unwrap_or(0),
             })
-        })
-        .collect();
+        }));
+
+        let page_info = &data["search"]["pageInfo"];
+        if !page_info["hasNextPage"].as_bool().unwrap_or(false) {
+            break;
+        }
+        after = page_info["endCursor"].as_str().map(String::from);
+        if after.is_none() {
+            break;
+        }
+    }
 
     Ok(items)
 }
@@ -462,6 +484,18 @@ mod tests {
             assert!(item.url.starts_with("https://"));
             assert!(matches!(item.kind.as_str(), "issue" | "pr"));
         }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires gh auth and network"]
+    async fn paginates_search_beyond_one_page() {
+        let state = AppState::new();
+        let items = search_items(&state, "repo:tauri-apps/tauri is:issue is:open sort:updated-desc", 120)
+            .await
+            .expect("search failed");
+        assert_eq!(items.len(), 120, "should fetch past the 50-item first page");
+        let unique: std::collections::HashSet<&str> = items.iter().map(|i| i.url.as_str()).collect();
+        assert_eq!(unique.len(), items.len(), "pages must not overlap");
     }
 
     #[tokio::test]
