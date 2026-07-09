@@ -1,9 +1,11 @@
 mod db;
+mod gh;
 mod github;
 mod poller;
 
 use db::{Db, StoredItem, Stream};
-use github::{AppState, Viewer};
+use gh::ItemAction;
+use github::{AppState, ItemDetail, LabelInfo, Viewer};
 use tauri::{AppHandle, Manager, State};
 
 #[tauri::command]
@@ -68,6 +70,22 @@ fn mark_all_read(db: State<'_, Db>, stream_id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn get_item_detail(state: State<'_, AppState>, url: String) -> Result<ItemDetail, String> {
+    github::fetch_item_detail(&state, &url).await
+}
+
+#[tauri::command]
+async fn item_action(url: String, kind: String, action: ItemAction) -> Result<String, String> {
+    let invocation = gh::build_invocation(&url, &kind, &action)?;
+    gh::run_gh(invocation).await
+}
+
+#[tauri::command]
+async fn list_repo_labels(repo: String) -> Result<Vec<LabelInfo>, String> {
+    gh::list_repo_labels(&repo).await
+}
+
+#[tauri::command]
 async fn poll_stream_now(app: AppHandle, stream_id: i64) -> Result<usize, String> {
     let stream = app.state::<Db>().get_due_stream(stream_id)?;
     // 手動更新はユーザーが画面を見ているので OS 通知しない
@@ -99,7 +117,10 @@ pub fn run() {
             mark_read,
             mark_unread,
             mark_all_read,
-            poll_stream_now
+            poll_stream_now,
+            get_item_detail,
+            item_action,
+            list_repo_labels
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

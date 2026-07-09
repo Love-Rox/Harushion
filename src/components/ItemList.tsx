@@ -1,4 +1,5 @@
 import type { Item, Stream, Viewer } from "../types";
+import { relativeTime } from "./format";
 
 type Props = {
   stream: Stream | null;
@@ -11,22 +12,12 @@ type Props = {
   onPollNow: () => void;
   polling: boolean;
   viewer: Viewer | null;
-  onItemClick: (item: Item) => void;
+  selectedItemUrl: string | null;
+  onItemSelect: (item: Item) => void;
+  onItemOpenInBrowser: (item: Item) => void;
   onToggleRead: (item: Item) => void;
   onCreateStream: () => void;
 };
-
-function relativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) return "たった今";
-  if (minutes < 60) return `${minutes}分前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}時間前`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}日前`;
-  return new Date(iso).toLocaleDateString();
-}
 
 function stateLabel(item: Item): { text: string; className: string } {
   if (item.kind === "pr") {
@@ -50,7 +41,9 @@ export function ItemList({
   onPollNow,
   polling,
   viewer,
-  onItemClick,
+  selectedItemUrl,
+  onItemSelect,
+  onItemOpenInBrowser,
   onToggleRead,
   onCreateStream,
 }: Props) {
@@ -104,8 +97,12 @@ export function ItemList({
         {stream &&
           items.map((item) => {
             const state = stateLabel(item);
+            const selected = item.url === selectedItemUrl;
             return (
-              <div key={item.url} className={`item ${item.isRead ? "read" : "unread"}`}>
+              <div
+                key={item.url}
+                className={`item ${item.isRead ? "read" : "unread"}${selected ? " selected" : ""}`}
+              >
                 <button
                   className="read-toggle"
                   title={item.isRead ? "未読にする" : "既読にする"}
@@ -113,11 +110,7 @@ export function ItemList({
                 >
                   <span className="read-dot" />
                 </button>
-                <button
-                  className="item-open"
-                  onClick={() => onItemClick(item)}
-                  title={`${item.url} をブラウザで開く`}
-                >
+                <button className="item-open" onClick={() => onItemSelect(item)} title={item.title}>
                   <span className={`kind kind-${item.kind}`}>{item.kind === "pr" ? "PR" : "Issue"}</span>
                   <span className="item-main">
                     <span className="item-title">{item.title}</span>
@@ -130,6 +123,16 @@ export function ItemList({
                     </span>
                   </span>
                   <span className={`state ${state.className}`}>{state.text}</span>
+                </button>
+                <button
+                  className="item-open-browser"
+                  title={`${item.url} をブラウザで開く`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onItemOpenInBrowser(item);
+                  }}
+                >
+                  ↗
                 </button>
               </div>
             );

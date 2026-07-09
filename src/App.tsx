@@ -2,15 +2,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { Item, Stream, Viewer } from "./types";
+import type { Item, ItemAction, ItemDetail, LabelInfo, Stream, Viewer } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { StreamModal } from "./components/StreamModal";
 import type { StreamCreateInput, StreamUpdateInput } from "./components/StreamModal";
 import { ItemList } from "./components/ItemList";
+import { DetailPane } from "./components/DetailPane";
 import "./App.css";
 
 function sortStreams(streams: Stream[]): Stream[] {
   return [...streams].sort((a, b) => a.position - b.position || a.id - b.id);
+}
+
+function actionKey(action: ItemAction): string {
+  if (action.type === "review") return `review:${action.verdict}`;
+  if (action.type === "ready") return `ready:${action.undo}`;
+  return action.type;
 }
 
 function App() {
@@ -25,6 +32,14 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingStream, setEditingStream] = useState<Stream | null>(null);
+
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [itemDetail, setItemDetail] = useState<ItemDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [actionPending, setActionPending] = useState(false);
+  const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
+  const [repoLabels, setRepoLabels] = useState<Record<string, LabelInfo[]>>({});
 
   const selectedStreamIdRef = useRef<number | null>(null);
   const unreadOnlyRef = useRef(unreadOnly);
@@ -95,19 +110,95 @@ function App() {
     };
   }, [loadStreams, loadItems]);
 
+  // Selected stream changed: clear detail selection.
+  useEffect(() => {
+    setSelectedItem(null);
+    setItemDetail(null);
+    setDetailError(null);
+  }, [selectedStreamId]);
+
+  // Selected item disappeared from the current list (e.g. filtered out): clear selection.
+  useEffect(() => {
+    setSelectedItem((prev) => {
+      if (prev && !items.some((i) => i.url === prev.url)) {
+        setItemDetail(null);
+        setDetailError(null);
+        return null;
+      }
+      return prev;
+    });
+  }, [items]);
+
   const applyReadState = (url: string, isRead: boolean) => {
     setItems((prev) => prev.map((i) => (i.url === url ? { ...i, isRead } : i)));
   };
 
-  const handleItemClick = async (item: Item) => {
-    void openUrl(item.url);
+  const loadDetail = useCallback(async (url: string) => {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const result = await invoke<ItemDetail>("get_item_detail", { url });
+      setItemDetail(result);
+    } catch (e) {
+      setDetailError(String(e));
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const handleSelectItem = async (item: Item) => {
+    setSelectedItem(item);
+    setItemDetail(null);
+    setDetailError(null);
     applyReadState(item.url, true);
+    void loadDetail(item.url);
     try {
       await invoke<void>("mark_read", { itemUrl: item.url });
     } catch (e) {
       setError(String(e));
     }
     await loadStreams();
+  };
+
+  const handleOpenInBrowser = (item: Item) => {
+    void openUrl(item.url);
+  };
+
+  const handleOpenUrl = (url: string) => {
+    void openUrl(url);
+  };
+
+  const loadRepoLabels = useCallback(
+    async (repo: string): Promise<LabelInfo[]> => {
+      const cached = repoLabels[repo];
+      if (cached) return cached;
+      const result = await invoke<LabelInfo[]>("list_repo_labels", { repo });
+      setRepoLabels((prev) => ({ ...prev, [repo]: result }));
+      return result;
+    },
+    [repoLabels],
+  );
+
+  const handleAction = async (action: ItemAction): Promise<boolean> => {
+    if (!selectedItem) return false;
+    setActionPending(true);
+    setPendingActionKey(actionKey(action));
+    setDetailError(null);
+    try {
+      await invoke<string>("item_action", {
+        url: selectedItem.url,
+        kind: selectedItem.kind,
+        action,
+      });
+      await Promise.all([loadDetail(selectedItem.url), loadStreams()]);
+      return true;
+    } catch (e) {
+      setDetailError(String(e));
+      return false;
+    } finally {
+      setActionPending(false);
+      setPendingActionKey(null);
+    }
   };
 
   const handleToggleRead = async (item: Item) => {
@@ -202,9 +293,24 @@ function App() {
           onPollNow={() => void handlePollNow()}
           polling={polling}
           viewer={viewer}
-          onItemClick={(item) => void handleItemClick(item)}
+          selectedItemUrl={selectedItem?.url ?? null}
+          onItemSelect={(item) => void handleSelectItem(item)}
+          onItemOpenInBrowser={handleOpenInBrowser}
           onToggleRead={(item) => void handleToggleRead(item)}
           onCreateStream={openCreateModal}
+        />
+        <DetailPane
+          item={selectedItem}
+          detail={itemDetail}
+          loading={detailLoading}
+          error={detailError}
+          actionPending={actionPending}
+          pendingActionKey={pendingActionKey}
+          viewer={viewer}
+          onAction={handleAction}
+          onDismissError={() => setDetailError(null)}
+          onOpenUrl={handleOpenUrl}
+          loadRepoLabels={loadRepoLabels}
         />
       </div>
       {modalOpen && (

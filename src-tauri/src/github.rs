@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
@@ -155,30 +155,6 @@ query($q: String!, $first: Int!) {
 }
 "#;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // gh の実認証とネットワークを使う統合テスト。`cargo test -- --ignored` で明示実行する。
-    #[tokio::test]
-    #[ignore = "requires gh auth and network"]
-    async fn fetches_viewer_and_items_via_real_gh_auth() {
-        let state = AppState::new();
-
-        let viewer = fetch_viewer(&state).await.expect("viewer fetch failed");
-        assert!(!viewer.login.is_empty(), "viewer login should not be empty");
-
-        let items = search_items(&state, "involves:@me sort:updated-desc", 10)
-            .await
-            .expect("search failed");
-        for item in &items {
-            assert!(!item.title.is_empty());
-            assert!(item.url.starts_with("https://"));
-            assert!(matches!(item.kind.as_str(), "issue" | "pr"));
-        }
-    }
-}
-
 pub async fn search_items(state: &AppState, query: &str, first: u32) -> Result<Vec<Item>, String> {
     let data = state
         .graphql(SEARCH_QUERY, json!({ "q": query, "first": first }))
@@ -218,3 +194,305 @@ pub async fn search_items(state: &AppState, query: &str, first: u32) -> Result<V
 
     Ok(items)
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct LabelInfo {
+    pub name: String,
+    pub color: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentInfo {
+    pub author: Option<String>,
+    pub author_avatar: Option<String>,
+    pub body_html: String,
+    pub created_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckInfo {
+    pub name: String,
+    pub status: String,
+    pub url: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewInfo {
+    pub author: Option<String>,
+    pub state: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemDetail {
+    pub kind: String,
+    pub number: i64,
+    pub title: String,
+    pub url: String,
+    pub state: String,
+    pub is_draft: bool,
+    pub body_html: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub author: Option<String>,
+    pub author_avatar: Option<String>,
+    pub repo: String,
+    pub labels: Vec<LabelInfo>,
+    pub assignees: Vec<String>,
+    pub milestone: Option<String>,
+    pub base_ref: Option<String>,
+    pub head_ref: Option<String>,
+    pub additions: i64,
+    pub deletions: i64,
+    pub changed_files: i64,
+    pub mergeable: Option<String>,
+    pub review_decision: Option<String>,
+    pub checks: Vec<CheckInfo>,
+    pub reviews: Vec<ReviewInfo>,
+    pub comments: Vec<CommentInfo>,
+    pub comments_total: i64,
+}
+
+const DETAIL_QUERY: &str = r#"
+query($url: URI!) {
+  resource(url: $url) {
+    __typename
+    ... on Issue {
+      number title url state bodyHTML createdAt updatedAt
+      author { login avatarUrl }
+      repository { nameWithOwner }
+      labels(first: 30) { nodes { name color } }
+      assignees(first: 15) { nodes { login } }
+      milestone { title }
+      comments(last: 30) {
+        totalCount
+        nodes { author { login avatarUrl } bodyHTML createdAt }
+      }
+    }
+    ... on PullRequest {
+      number title url state isDraft bodyHTML createdAt updatedAt
+      author { login avatarUrl }
+      repository { nameWithOwner }
+      labels(first: 30) { nodes { name color } }
+      assignees(first: 15) { nodes { login } }
+      milestone { title }
+      baseRefName headRefName additions deletions changedFiles
+      mergeable reviewDecision
+      latestReviews(first: 15) { nodes { author { login } state } }
+      commits(last: 1) {
+        nodes {
+          commit {
+            statusCheckRollup {
+              contexts(first: 50) {
+                nodes {
+                  __typename
+                  ... on CheckRun { name status conclusion detailsUrl }
+                  ... on StatusContext { context state targetUrl }
+                }
+              }
+            }
+          }
+        }
+      }
+      comments(last: 30) {
+        totalCount
+        nodes { author { login avatarUrl } bodyHTML createdAt }
+      }
+    }
+  }
+}
+"#;
+
+fn parse_comments(node: &Value) -> (Vec<CommentInfo>, i64) {
+    let total = node["comments"]["totalCount"].as_i64().unwrap_or(0);
+    let comments = node["comments"]["nodes"]
+        .as_array()
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|c| {
+                    Some(CommentInfo {
+                        author: c["author"]["login"].as_str().map(String::from),
+                        author_avatar: c["author"]["avatarUrl"].as_str().map(String::from),
+                        body_html: c["bodyHTML"].as_str()?.to_string(),
+                        created_at: c["createdAt"].as_str().unwrap_or_default().to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    (comments, total)
+}
+
+fn parse_checks(node: &Value) -> Vec<CheckInfo> {
+    node["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"]
+        .as_array()
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|c| match c["__typename"].as_str()? {
+                    "CheckRun" => Some(CheckInfo {
+                        name: c["name"].as_str()?.to_string(),
+                        // 完了済みなら結論(SUCCESS/FAILURE等)、実行中ならステータス(IN_PROGRESS等)
+                        status: c["conclusion"]
+                            .as_str()
+                            .or(c["status"].as_str())
+                            .unwrap_or("PENDING")
+                            .to_string(),
+                        url: c["detailsUrl"].as_str().map(String::from),
+                    }),
+                    "StatusContext" => Some(CheckInfo {
+                        name: c["context"].as_str()?.to_string(),
+                        status: c["state"].as_str().unwrap_or("PENDING").to_string(),
+                        url: c["targetUrl"].as_str().map(String::from),
+                    }),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail, String> {
+    let data = state.graphql(DETAIL_QUERY, json!({ "url": url })).await?;
+    let node = &data["resource"];
+
+    let kind = match node["__typename"].as_str() {
+        Some("Issue") => "issue",
+        Some("PullRequest") => "pr",
+        _ => return Err("この URL は Issue / Pull Request ではありません".into()),
+    };
+
+    let names = |key: &str, field: &str| -> Vec<String> {
+        node[key]["nodes"]
+            .as_array()
+            .map(|ns| {
+                ns.iter()
+                    .filter_map(|n| n[field].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    let labels = node["labels"]["nodes"]
+        .as_array()
+        .map(|ns| {
+            ns.iter()
+                .filter_map(|n| {
+                    Some(LabelInfo {
+                        name: n["name"].as_str()?.to_string(),
+                        color: n["color"].as_str().unwrap_or("888888").to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let reviews = node["latestReviews"]["nodes"]
+        .as_array()
+        .map(|ns| {
+            ns.iter()
+                .filter_map(|n| {
+                    Some(ReviewInfo {
+                        author: n["author"]["login"].as_str().map(String::from),
+                        state: n["state"].as_str()?.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let (comments, comments_total) = parse_comments(node);
+
+    Ok(ItemDetail {
+        kind: kind.to_string(),
+        number: node["number"].as_i64().unwrap_or(0),
+        title: node["title"].as_str().unwrap_or_default().to_string(),
+        url: node["url"].as_str().unwrap_or(url).to_string(),
+        state: node["state"].as_str().unwrap_or_default().to_string(),
+        is_draft: node["isDraft"].as_bool().unwrap_or(false),
+        body_html: node["bodyHTML"].as_str().unwrap_or_default().to_string(),
+        created_at: node["createdAt"].as_str().unwrap_or_default().to_string(),
+        updated_at: node["updatedAt"].as_str().unwrap_or_default().to_string(),
+        author: node["author"]["login"].as_str().map(String::from),
+        author_avatar: node["author"]["avatarUrl"].as_str().map(String::from),
+        repo: node["repository"]["nameWithOwner"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
+        labels,
+        assignees: names("assignees", "login"),
+        milestone: node["milestone"]["title"].as_str().map(String::from),
+        base_ref: node["baseRefName"].as_str().map(String::from),
+        head_ref: node["headRefName"].as_str().map(String::from),
+        additions: node["additions"].as_i64().unwrap_or(0),
+        deletions: node["deletions"].as_i64().unwrap_or(0),
+        changed_files: node["changedFiles"].as_i64().unwrap_or(0),
+        mergeable: node["mergeable"].as_str().map(String::from),
+        review_decision: node["reviewDecision"].as_str().map(String::from),
+        checks: parse_checks(node),
+        reviews,
+        comments,
+        comments_total,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // gh の実認証とネットワークを使う統合テスト。`cargo test -- --ignored` で明示実行する。
+    #[tokio::test]
+    #[ignore = "requires gh auth and network"]
+    async fn fetches_viewer_and_items_via_real_gh_auth() {
+        let state = AppState::new();
+
+        let viewer = fetch_viewer(&state).await.expect("viewer fetch failed");
+        assert!(!viewer.login.is_empty(), "viewer login should not be empty");
+
+        let items = search_items(&state, "involves:@me sort:updated-desc", 10)
+            .await
+            .expect("search failed");
+        for item in &items {
+            assert!(!item.title.is_empty());
+            assert!(item.url.starts_with("https://"));
+            assert!(matches!(item.kind.as_str(), "issue" | "pr"));
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires gh auth and network"]
+    async fn fetches_issue_detail_from_public_repo() {
+        let state = AppState::new();
+        let detail = fetch_item_detail(&state, "https://github.com/tauri-apps/tauri/issues/2975")
+            .await
+            .expect("detail fetch failed");
+        assert_eq!(detail.kind, "issue");
+        assert_eq!(detail.number, 2975);
+        assert_eq!(detail.repo, "tauri-apps/tauri");
+        assert!(!detail.title.is_empty());
+        assert!(!detail.body_html.is_empty());
+        assert!(detail.comments_total > 0);
+        assert!(!detail.comments.is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore = "requires gh auth and network"]
+    async fn fetches_pr_detail_with_pr_fields() {
+        let state = AppState::new();
+        // マージ済みの安定した公開 PR
+        let detail = fetch_item_detail(&state, "https://github.com/tauri-apps/tauri/pull/11000")
+            .await
+            .expect("detail fetch failed");
+        assert_eq!(detail.kind, "pr");
+        assert_eq!(detail.state, "MERGED");
+        assert!(detail.base_ref.is_some());
+        assert!(detail.head_ref.is_some());
+        assert!(detail.changed_files > 0);
+    }
+}
+
