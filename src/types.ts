@@ -3,6 +3,18 @@ export type Viewer = {
   avatarUrl: string;
 };
 
+export type Stream = {
+  id: number;
+  name: string;
+  query: string;
+  folder: string | null;
+  intervalSec: number;
+  enabled: boolean;
+  position: number;
+  unreadCount: number;
+  totalCount: number;
+};
+
 export type Item = {
   kind: "issue" | "pr";
   number: number;
@@ -15,4 +27,5 @@ export type Item = {
   authorAvatar: string | null;
   repo: string;
   comments: number;
+  isRead: boolean;
 };

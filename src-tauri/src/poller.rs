@@ -1,0 +1,73 @@
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_notification::NotificationExt;
+
+use crate::db::{Db, DueStream};
+use crate::github::{self, AppState};
+
+const TICK: Duration = Duration::from_secs(15);
+const FETCH_COUNT: u32 = 50;
+
+fn unix_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+pub fn spawn(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            if let Err(e) = tick(&app).await {
+                eprintln!("[poller] {e}");
+            }
+            tokio::time::sleep(TICK).await;
+        }
+    });
+}
+
+async fn tick(app: &AppHandle) -> Result<(), String> {
+    let due = app.state::<Db>().due_streams(unix_now())?;
+    for stream in due {
+        // 1 Stream の失敗(オフライン等)で他を止めない
+        if let Err(e) = poll_stream(app, &stream, true).await {
+            eprintln!("[poller] stream {} ({}): {e}", stream.id, stream.name);
+        }
+    }
+    Ok(())
+}
+
+/// Stream を 1 回ポーリングして新着数を返す。notify=true なら新着を OS 通知する
+/// (初回ポーリングはバックフィルなので通知しない)。
+pub async fn poll_stream(app: &AppHandle, stream: &DueStream, notify: bool) -> Result<usize, String> {
+    let items = {
+        let gh = app.state::<AppState>();
+        github::search_items(&gh, &stream.query, FETCH_COUNT).await?
+    };
+
+    let db = app.state::<Db>();
+    let fresh = db.upsert_items(stream.id, &items)?;
+    db.set_polled(stream.id, unix_now())?;
+
+    if !fresh.is_empty() {
+        let _ = app.emit("items-updated", serde_json::json!({ "streamId": stream.id }));
+
+        if notify && !stream.first_poll {
+            let body = match fresh.len() {
+                1 => fresh[0].clone(),
+                n => format!("{} 他{}件", fresh[0], n - 1),
+            };
+            if let Err(e) = app
+                .notification()
+                .builder()
+                .title(format!("{} に新着 {} 件", stream.name, fresh.len()))
+                .body(body)
+                .show()
+            {
+                eprintln!("[poller] notification failed: {e}");
+            }
+        }
+    }
+    Ok(fresh.len())
+}
