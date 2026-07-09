@@ -67,13 +67,16 @@ pub async fn poll_stream(app: &AppHandle, stream: &DueStream, notify: bool) -> R
                 1 => fresh[0].clone(),
                 n => format!("{} 他{}件", fresh[0], n - 1),
             };
-            if let Err(e) = app
+            let builder = app
                 .notification()
                 .builder()
                 .title(format!("{} に新着 {} 件", stream.name, fresh.len()))
-                .body(body)
-                .show()
-            {
+                .body(body);
+            // macOS/Windows はバンドルのアプリアイコンが自動適用される。
+            // Linux (freedesktop) のみ、パッケージが導入するアイコン名を明示する。
+            #[cfg(target_os = "linux")]
+            let builder = builder.icon("harushion".to_string());
+            if let Err(e) = builder.show() {
                 eprintln!("[poller] notification failed: {e}");
             }
         }
