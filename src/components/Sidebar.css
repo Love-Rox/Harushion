@@ -51,10 +51,11 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
-/* モーダル用の全幅グリッドを、狭いポップオーバー内では固定サイズのラップ配置に戻す */
+/* モーダル用の全幅配置を、狭いポップオーバー内では固定サイズのラップ配置に戻す */
 .folder-color-popover .color-swatch-row {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 8px;
   width: auto;
 }
@@ -62,7 +63,6 @@
 .folder-color-popover .color-swatch {
   width: 18px;
   height: 18px;
-  aspect-ratio: auto;
   flex-shrink: 0;
 }
 

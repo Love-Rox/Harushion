@@ -1,6 +1,6 @@
 # GitViewer 開発ガイド
 
-Jasper ライクな GitHub Issue/PR ウォッチャー(Tauri 2 + React 19 + TypeScript)。
+GitHub の Issue/PR を Stream 単位でウォッチするデスクトップクライアント(Tauri 2 + React 19 + TypeScript)。
 
 ## アーキテクチャ方針
 
