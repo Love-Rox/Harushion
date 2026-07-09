@@ -291,13 +291,13 @@ mod tests {
     }
 
     /// サンドボックスリポジトリに実 Issue を作り、操作経路(build_invocation → run_gh)を
-    /// 端から端まで通す。環境変数 GITVIEWER_SANDBOX_REPO を設定したときのみ実行される:
-    /// `GITVIEWER_SANDBOX_REPO=owner/repo cargo test -- --ignored mutating_sandbox`
+    /// 端から端まで通す。環境変数 HARUSHION_SANDBOX_REPO を設定したときのみ実行される:
+    /// `HARUSHION_SANDBOX_REPO=owner/repo cargo test -- --ignored mutating_sandbox`
     #[tokio::test]
-    #[ignore = "mutates a real repo; opt-in via GITVIEWER_SANDBOX_REPO"]
+    #[ignore = "mutates a real repo; opt-in via HARUSHION_SANDBOX_REPO"]
     async fn mutating_sandbox_roundtrip() {
-        let Ok(repo) = std::env::var("GITVIEWER_SANDBOX_REPO") else {
-            eprintln!("GITVIEWER_SANDBOX_REPO 未設定のためスキップ");
+        let Ok(repo) = std::env::var("HARUSHION_SANDBOX_REPO") else {
+            eprintln!("HARUSHION_SANDBOX_REPO 未設定のためスキップ");
             return;
         };
 
@@ -310,8 +310,8 @@ mod tests {
         let url = run_gh(GhInvocation {
             args: strs(&[
                 "issue", "create", "-R", &repo,
-                "--title", "[E2E] GitViewer action roundtrip",
-                "--body", "GitViewer の操作経路 E2E テスト用に自動作成されました。自動でクローズされます。",
+                "--title", "[E2E] Harushion action roundtrip",
+                "--body", "Harushion の操作経路 E2E テスト用に自動作成されました。自動でクローズされます。",
             ]),
             stdin: None,
         })

@@ -1,4 +1,4 @@
-# GitViewer
+# Harushion
 
 GitHub の Issue/PR を Stream(検索クエリ)単位でウォッチするデスクトップクライアント。Tauri 2 + React で軽量に動作し、認証は GitHub CLI (`gh`) に委譲します。
 

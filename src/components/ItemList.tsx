@@ -41,7 +41,7 @@ export function ItemList({
     <div className="main">
       <header className="header">
         <div className="header-title">
-          <h1 className="app-title">{stream ? stream.name : "GitViewer"}</h1>
+          <h1 className="app-title">{stream ? stream.name : "Harushion"}</h1>
           {stream && <code className="query">{stream.query}</code>}
         </div>
         <div className="header-right">

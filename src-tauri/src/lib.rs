@@ -181,17 +181,37 @@ pub fn run() {
         .manage(AppState::new())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
+            // 旧 identifier (com.love-rox.gitviewer) 時代のデータディレクトリからの移行
+            if !data_dir.exists() {
+                if let Some(parent) = data_dir.parent() {
+                    let legacy_dir = parent.join("com.love-rox.gitviewer");
+                    if legacy_dir.exists() {
+                        let _ = std::fs::rename(&legacy_dir, &data_dir);
+                    }
+                }
+            }
             std::fs::create_dir_all(&data_dir)?;
-            let db = Db::open(&data_dir.join("gitviewer.db"))
-                .map_err(std::io::Error::other)?;
+
+            // DB ファイル名も旧名 (gitviewer.db) から移行(WAL/SHM を含めて揃えて改名)
+            let db_path = data_dir.join("harushion.db");
+            if !db_path.exists() && data_dir.join("gitviewer.db").exists() {
+                for suffix in ["", "-wal", "-shm"] {
+                    let old = data_dir.join(format!("gitviewer.db{suffix}"));
+                    if old.exists() {
+                        let _ = std::fs::rename(&old, data_dir.join(format!("harushion.db{suffix}")));
+                    }
+                }
+            }
+
+            let db = Db::open(&db_path).map_err(std::io::Error::other)?;
             app.manage(db);
             poller::spawn(app.handle().clone());
 
             // 起動スモーク用フック: ウィンドウ生成→navigate の実経路を CI 外で確認する
-            if std::env::var("GITVIEWER_SMOKE_BROWSER").is_ok() {
+            if std::env::var("HARUSHION_SMOKE_BROWSER").is_ok() {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    match browser::open_github(&handle, "https://github.com/Love-Rox/GitViewer").await {
+                    match browser::open_github(&handle, "https://github.com/Love-Rox/Harushion").await {
                         Ok(()) => eprintln!("[smoke] browser window created"),
                         Err(e) => eprintln!("[smoke] browser create FAILED: {e}"),
                     }

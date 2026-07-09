@@ -22,8 +22,8 @@ type Props = {
   onRemoveGraphRepo: (repo: string) => void;
 };
 
-const STREAM_DND_TYPE = "application/x-gitviewer-stream";
-const FOLDER_DND_TYPE = "application/x-gitviewer-folder";
+const STREAM_DND_TYPE = "application/x-harushion-stream";
+const FOLDER_DND_TYPE = "application/x-harushion-folder";
 
 type DropIndicator = { id: number; position: "above" | "below" } | null;
 type FolderDropIndicator = { folder: string; position: "above" | "below" } | null;

@@ -10,7 +10,7 @@ describe("buildQuery", () => {
       kind: "pr",
       status: "open",
       relations: ["involves", "review-requested"],
-      repos: ["Love-Rox/GitViewer", "tauri-apps/tauri"],
+      repos: ["Love-Rox/Harushion", "tauri-apps/tauri"],
       org: "Love-Rox",
       labels: ["bug", "help wanted"],
       excludeDraft: true,
@@ -18,7 +18,7 @@ describe("buildQuery", () => {
       rest: "no:assignee",
     });
     expect(q).toBe(
-      'is:pr is:open involves:@me review-requested:@me repo:Love-Rox/GitViewer repo:tauri-apps/tauri org:Love-Rox label:"bug" label:"help wanted" -is:draft no:assignee sort:updated-desc',
+      'is:pr is:open involves:@me review-requested:@me repo:Love-Rox/Harushion repo:tauri-apps/tauri org:Love-Rox label:"bug" label:"help wanted" -is:draft no:assignee sort:updated-desc',
     );
   });
 

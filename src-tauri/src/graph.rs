@@ -466,10 +466,10 @@ mod tests {
     #[ignore = "requires gh auth and network"]
     async fn fetches_branch_graph_from_real_repo() {
         let state = AppState::new();
-        let graph = fetch_branch_graph(&state, "Love-Rox/GitViewer")
+        let graph = fetch_branch_graph(&state, "Love-Rox/Harushion")
             .await
             .expect("graph fetch failed");
-        assert_eq!(graph.repo, "Love-Rox/GitViewer");
+        assert_eq!(graph.repo, "Love-Rox/Harushion");
         assert_eq!(graph.default_branch, "main");
         assert!(!graph.commits.is_empty());
         assert!(graph.branches.iter().any(|b| b.is_default));
@@ -515,7 +515,7 @@ mod tests {
 
     #[test]
     fn parse_repo_validation() {
-        assert!(parse_repo("Love-Rox/GitViewer").is_ok());
+        assert!(parse_repo("Love-Rox/Harushion").is_ok());
         assert!(parse_repo("a.b/c_d-e").is_ok());
         assert!(parse_repo("noslash").is_err());
         assert!(parse_repo("a/b/c").is_err());

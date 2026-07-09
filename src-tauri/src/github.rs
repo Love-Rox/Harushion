@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
 const GRAPHQL_ENDPOINT: &str = "https://api.github.com/graphql";
-const USER_AGENT: &str = concat!("GitViewer/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!("Harushion/", env!("CARGO_PKG_VERSION"));
 
 /// アプリ全体で共有する状態。トークンは gh CLI から取得しメモリ上にのみ保持する。
 pub struct AppState {

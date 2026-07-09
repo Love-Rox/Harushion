@@ -26,7 +26,7 @@ pub async fn open_github(app: &AppHandle, url: &str) -> Result<(), String> {
     }
 
     WebviewWindowBuilder::new(app, BROWSER_LABEL, WebviewUrl::External(parsed))
-        .title("GitHub — GitViewer")
+        .title("GitHub — Harushion")
         .inner_size(1180.0, 860.0)
         .build()
         .map_err(|e| format!("ブラウザウィンドウを開けませんでした: {e}"))?;
@@ -39,7 +39,7 @@ mod tests {
 
     #[test]
     fn accepts_only_https_github_com() {
-        assert!(validate_github_url("https://github.com/Love-Rox/GitViewer/issues/1").is_ok());
+        assert!(validate_github_url("https://github.com/Love-Rox/Harushion/issues/1").is_ok());
         assert!(validate_github_url("https://github.com/").is_ok());
 
         // ホスト偽装・スキーム違い・サブドメインは拒否
