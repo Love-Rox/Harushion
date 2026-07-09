@@ -160,3 +160,47 @@
   color: var(--accent);
   text-decoration: underline;
 }
+
+.color-swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.color-swatch {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--border) inset;
+}
+
+.color-swatch.selected {
+  border-color: var(--fg);
+}
+
+.color-swatch-none {
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.color-swatch-none::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: linear-gradient(
+    to top right,
+    transparent calc(50% - 1px),
+    var(--closed) calc(50% - 1px),
+    var(--closed) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+}
+
+.duplicate-btn {
+  margin-right: 8px;
+}

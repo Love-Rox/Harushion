@@ -18,6 +18,7 @@ pub struct Stream {
     pub interval_sec: i64,
     pub enabled: bool,
     pub position: i64,
+    pub color: Option<String>,
     pub unread_count: i64,
     pub total_count: i64,
 }
@@ -90,6 +91,16 @@ CREATE TABLE IF NOT EXISTS graph_repos (
   repo TEXT PRIMARY KEY,
   position INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS folder_colors (
+  folder TEXT PRIMARY KEY,
+  color TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS folder_order (
+  folder TEXT PRIMARY KEY,
+  position INTEGER NOT NULL
+);
 "#;
 
 // 既読判定: read_state があり、既読にした時点の updated_at 以降更新されていないこと
@@ -110,6 +121,9 @@ impl Db {
         conn.pragma_update(None, "journal_mode", "WAL").map_err(db_err)?;
         conn.pragma_update(None, "foreign_keys", "ON").map_err(db_err)?;
         conn.execute_batch(SCHEMA).map_err(db_err)?;
+
+        // 既存 DB へのカラム追加移行(すでに存在する場合のエラーは無視)
+        let _ = conn.execute("ALTER TABLE streams ADD COLUMN color TEXT", []);
 
         // 初回起動時のシード Stream
         let count: i64 = conn
@@ -132,7 +146,7 @@ impl Db {
     pub fn list_streams(&self) -> Result<Vec<Stream>, String> {
         let conn = self.lock();
         let sql = format!(
-            "SELECT s.id, s.name, s.query, s.folder, s.interval_sec, s.enabled, s.position,
+            "SELECT s.id, s.name, s.query, s.folder, s.interval_sec, s.enabled, s.position, s.color,
                (SELECT COUNT(*) FROM stream_items si
                   JOIN items i ON i.url = si.item_url
                   LEFT JOIN read_state r ON r.item_url = i.url
@@ -152,7 +166,7 @@ impl Db {
     pub fn get_stream(&self, id: i64) -> Result<Stream, String> {
         let conn = self.lock();
         let sql = format!(
-            "SELECT s.id, s.name, s.query, s.folder, s.interval_sec, s.enabled, s.position,
+            "SELECT s.id, s.name, s.query, s.folder, s.interval_sec, s.enabled, s.position, s.color,
                (SELECT COUNT(*) FROM stream_items si
                   JOIN items i ON i.url = si.item_url
                   LEFT JOIN read_state r ON r.item_url = i.url
@@ -169,12 +183,13 @@ impl Db {
         query: &str,
         folder: Option<&str>,
         interval_sec: i64,
+        color: Option<&str>,
     ) -> Result<i64, String> {
         let conn = self.lock();
         conn.execute(
-            "INSERT INTO streams (name, query, folder, interval_sec, position)
-             VALUES (?1, ?2, ?3, ?4, (SELECT COALESCE(MAX(position) + 1, 0) FROM streams))",
-            params![name, query, folder, interval_sec.max(60)],
+            "INSERT INTO streams (name, query, folder, interval_sec, color, position)
+             VALUES (?1, ?2, ?3, ?4, ?5, (SELECT COALESCE(MAX(position) + 1, 0) FROM streams))",
+            params![name, query, folder, interval_sec.max(60), color],
         )
         .map_err(db_err)?;
         Ok(conn.last_insert_rowid())
@@ -189,14 +204,16 @@ impl Db {
         folder: Option<&str>,
         interval_sec: i64,
         enabled: bool,
+        color: Option<&str>,
     ) -> Result<(), String> {
         let conn = self.lock();
         // クエリが変わったら次の tick で即再取得されるよう last_polled_at をリセット
         conn.execute(
             "UPDATE streams SET name = ?2, query = ?3, folder = ?4, interval_sec = ?5, enabled = ?6,
+               color = ?7,
                last_polled_at = CASE WHEN query = ?3 THEN last_polled_at ELSE NULL END
              WHERE id = ?1",
-            params![id, name, query, folder, interval_sec.max(60), enabled],
+            params![id, name, query, folder, interval_sec.max(60), enabled, color],
         )
         .map_err(db_err)?;
         Ok(())
@@ -389,6 +406,79 @@ impl Db {
         .map_err(db_err)
     }
 
+    /// 表示順(配列の並び)どおりに position を振り直す
+    pub fn reorder_streams(&self, ids: &[i64]) -> Result<(), String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(db_err)?;
+        for (position, id) in ids.iter().enumerate() {
+            tx.execute(
+                "UPDATE streams SET position = ?2 WHERE id = ?1",
+                params![id, position as i64],
+            )
+            .map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn list_folder_order(&self) -> Result<Vec<String>, String> {
+        let conn = self.lock();
+        let mut stmt = conn
+            .prepare("SELECT folder FROM folder_order ORDER BY position")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        Ok(rows)
+    }
+
+    /// フォルダの表示順を丸ごと置き換える
+    pub fn reorder_folders(&self, folders: &[String]) -> Result<(), String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(db_err)?;
+        tx.execute("DELETE FROM folder_order", []).map_err(db_err)?;
+        for (position, folder) in folders.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO folder_order (folder, position) VALUES (?1, ?2)",
+                params![folder, position as i64],
+            )
+            .map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn list_folder_colors(&self) -> Result<std::collections::HashMap<String, String>, String> {
+        let conn = self.lock();
+        let mut stmt = conn
+            .prepare("SELECT folder, color FROM folder_colors")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(db_err)?
+            .collect::<Result<_, _>>()
+            .map_err(db_err)?;
+        Ok(rows)
+    }
+
+    pub fn set_folder_color(&self, folder: &str, color: Option<&str>) -> Result<(), String> {
+        let conn = self.lock();
+        match color {
+            Some(c) => conn
+                .execute(
+                    "INSERT OR REPLACE INTO folder_colors (folder, color) VALUES (?1, ?2)",
+                    params![folder, c],
+                )
+                .map_err(db_err)?,
+            None => conn
+                .execute("DELETE FROM folder_colors WHERE folder = ?1", params![folder])
+                .map_err(db_err)?,
+        };
+        Ok(())
+    }
+
     pub fn list_graph_repos(&self) -> Result<Vec<String>, String> {
         let conn = self.lock();
         let mut stmt = conn
@@ -440,8 +530,9 @@ fn row_to_stream(row: &rusqlite::Row<'_>) -> rusqlite::Result<Stream> {
         interval_sec: row.get(4)?,
         enabled: row.get(5)?,
         position: row.get(6)?,
-        unread_count: row.get(7)?,
-        total_count: row.get(8)?,
+        color: row.get(7)?,
+        unread_count: row.get(8)?,
+        total_count: row.get(9)?,
     })
 }
 
@@ -480,12 +571,12 @@ mod tests {
     #[test]
     fn stream_crud_roundtrip() {
         let db = test_db();
-        let id = db.create_stream("PRs", "is:pr review-requested:@me", Some("work"), 90).unwrap();
+        let id = db.create_stream("PRs", "is:pr review-requested:@me", Some("work"), 90, None).unwrap();
         let s = db.get_stream(id).unwrap();
         assert_eq!((s.name.as_str(), s.folder.as_deref(), s.interval_sec, s.enabled),
                    ("PRs", Some("work"), 90, true));
 
-        db.update_stream(id, "PRs2", "is:pr author:@me", None, 60, false).unwrap();
+        db.update_stream(id, "PRs2", "is:pr author:@me", None, 60, false, None).unwrap();
         let s = db.get_stream(id).unwrap();
         assert_eq!((s.name.as_str(), s.folder.as_deref(), s.enabled), ("PRs2", None, false));
 
@@ -496,14 +587,14 @@ mod tests {
     #[test]
     fn interval_is_clamped_to_60s_minimum() {
         let db = test_db();
-        let id = db.create_stream("fast", "q", None, 5).unwrap();
+        let id = db.create_stream("fast", "q", None, 5, None).unwrap();
         assert_eq!(db.get_stream(id).unwrap().interval_sec, 60);
     }
 
     #[test]
     fn unread_lifecycle() {
         let db = test_db();
-        let id = db.create_stream("s", "q", None, 60).unwrap();
+        let id = db.create_stream("s", "q", None, 60, None).unwrap();
 
         let fresh = db.upsert_items(id, &[item("u1", "2026-07-09T00:00:00Z")]).unwrap();
         assert_eq!(fresh.len(), 1, "new item should be fresh");
@@ -532,8 +623,8 @@ mod tests {
     #[test]
     fn mark_all_read_covers_only_that_stream() {
         let db = test_db();
-        let a = db.create_stream("a", "qa", None, 60).unwrap();
-        let b = db.create_stream("b", "qb", None, 60).unwrap();
+        let a = db.create_stream("a", "qa", None, 60, None).unwrap();
+        let b = db.create_stream("b", "qb", None, 60, None).unwrap();
         db.upsert_items(a, &[item("u1", "2026-07-09T00:00:00Z")]).unwrap();
         db.upsert_items(b, &[item("u2", "2026-07-09T00:00:00Z")]).unwrap();
 
@@ -545,8 +636,8 @@ mod tests {
     #[test]
     fn delete_stream_cleans_up_orphan_items() {
         let db = test_db();
-        let a = db.create_stream("a", "qa", None, 60).unwrap();
-        let b = db.create_stream("b", "qb", None, 60).unwrap();
+        let a = db.create_stream("a", "qa", None, 60, None).unwrap();
+        let b = db.create_stream("b", "qb", None, 60, None).unwrap();
         db.upsert_items(a, &[item("both", "2026-07-09T00:00:00Z"), item("only-a", "2026-07-09T00:00:00Z")]).unwrap();
         db.upsert_items(b, &[item("both", "2026-07-09T00:00:00Z")]).unwrap();
 
@@ -560,7 +651,7 @@ mod tests {
     #[test]
     fn list_items_limits_to_500_and_filters_before_limit() {
         let db = test_db();
-        let id = db.create_stream("big", "q", None, 60).unwrap();
+        let id = db.create_stream("big", "q", None, 60, None).unwrap();
         let items: Vec<Item> = (0..501)
             .map(|i| item(&format!("u{i:03}"), &format!("2026-01-01T00:{:02}:{:02}Z", i / 60, i % 60)))
             .collect();
@@ -583,7 +674,7 @@ mod tests {
     #[test]
     fn delete_stream_cascades_read_state() {
         let db = test_db();
-        let id = db.create_stream("s", "q", None, 60).unwrap();
+        let id = db.create_stream("s", "q", None, 60, None).unwrap();
         db.upsert_items(id, &[item("u1", "2026-07-09T00:00:00Z")]).unwrap();
         db.mark_read("u1").unwrap();
 
@@ -599,8 +690,8 @@ mod tests {
     fn due_streams_respects_interval_and_enabled() {
         let db = test_db();
         let seeded = db.list_streams().unwrap()[0].id;
-        let id = db.create_stream("s", "q", None, 60).unwrap();
-        db.update_stream(seeded, "off", "q", None, 60, false).unwrap();
+        let id = db.create_stream("s", "q", None, 60, None).unwrap();
+        db.update_stream(seeded, "off", "q", None, 60, false, None).unwrap();
 
         // 未ポーリングの enabled stream は first_poll=true で due
         let due = db.due_streams(1000).unwrap();
@@ -613,6 +704,54 @@ mod tests {
         let due = db.due_streams(1060).unwrap();
         assert_eq!(due.len(), 1, "past interval");
         assert!(!due[0].first_poll);
+    }
+
+    #[test]
+    fn reorder_streams_rewrites_positions() {
+        let db = test_db();
+        let seeded = db.list_streams().unwrap()[0].id;
+        let a = db.create_stream("a", "q", None, 60, None).unwrap();
+        let b = db.create_stream("b", "q", None, 60, None).unwrap();
+
+        db.reorder_streams(&[b, seeded, a]).unwrap();
+        let order: Vec<i64> = db.list_streams().unwrap().iter().map(|s| s.id).collect();
+        assert_eq!(order, [b, seeded, a]);
+    }
+
+    #[test]
+    fn folder_order_roundtrip() {
+        let db = test_db();
+        assert!(db.list_folder_order().unwrap().is_empty());
+        db.reorder_folders(&["work".into(), "oss".into()]).unwrap();
+        assert_eq!(db.list_folder_order().unwrap(), ["work", "oss"]);
+        db.reorder_folders(&["oss".into(), "work".into(), "misc".into()]).unwrap();
+        assert_eq!(db.list_folder_order().unwrap(), ["oss", "work", "misc"]);
+    }
+
+    #[test]
+    fn stream_color_roundtrip() {
+        let db = test_db();
+        let id = db.create_stream("c", "q", None, 60, Some("6366f1")).unwrap();
+        assert_eq!(db.get_stream(id).unwrap().color.as_deref(), Some("6366f1"));
+
+        db.update_stream(id, "c", "q", None, 60, true, None).unwrap();
+        assert_eq!(db.get_stream(id).unwrap().color, None, "color can be cleared");
+    }
+
+    #[test]
+    fn folder_colors_roundtrip() {
+        let db = test_db();
+        assert!(db.list_folder_colors().unwrap().is_empty());
+
+        db.set_folder_color("work", Some("16a34a")).unwrap();
+        db.set_folder_color("work", Some("e11d48")).unwrap(); // 上書き
+        db.set_folder_color("oss", Some("0284c7")).unwrap();
+        let colors = db.list_folder_colors().unwrap();
+        assert_eq!(colors.get("work").map(String::as_str), Some("e11d48"));
+        assert_eq!(colors.len(), 2);
+
+        db.set_folder_color("work", None).unwrap();
+        assert_eq!(db.list_folder_colors().unwrap().len(), 1);
     }
 
     #[test]
@@ -631,14 +770,14 @@ mod tests {
     fn query_change_resets_poll_schedule() {
         let db = test_db();
         let seeded = db.list_streams().unwrap()[0].id;
-        db.update_stream(seeded, "off", "q", None, 60, false).unwrap();
-        let id = db.create_stream("s", "q", None, 60).unwrap();
+        db.update_stream(seeded, "off", "q", None, 60, false, None).unwrap();
+        let id = db.create_stream("s", "q", None, 60, None).unwrap();
         db.set_polled(id, 1000).unwrap();
 
-        db.update_stream(id, "s", "q", None, 60, true).unwrap();
+        db.update_stream(id, "s", "q", None, 60, true, None).unwrap();
         assert!(db.due_streams(1010).unwrap().is_empty(), "same query keeps schedule");
 
-        db.update_stream(id, "s", "q2", None, 60, true).unwrap();
+        db.update_stream(id, "s", "q2", None, 60, true, None).unwrap();
         let due = db.due_streams(1010).unwrap();
         assert_eq!(due.len(), 1, "changed query is due immediately");
         assert!(due[0].first_poll);

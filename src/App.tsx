@@ -5,7 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { BranchGraph, Item, ItemAction, ItemDetail, LabelInfo, Stream, Viewer } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { StreamModal } from "./components/StreamModal";
-import type { StreamCreateInput, StreamUpdateInput } from "./components/StreamModal";
+import type { StreamCreateInput, StreamDuplicateInput, StreamUpdateInput } from "./components/StreamModal";
 import { ItemList } from "./components/ItemList";
 import { DetailPane } from "./components/DetailPane";
 import { GraphView } from "./components/GraphView";
@@ -35,6 +35,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingStream, setEditingStream] = useState<Stream | null>(null);
+  const [folderColors, setFolderColors] = useState<Record<string, string>>({});
+  const [folderOrder, setFolderOrder] = useState<string[]>([]);
 
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [itemDetail, setItemDetail] = useState<ItemDetail | null>(null);
@@ -84,6 +86,18 @@ function App() {
     return result;
   }, []);
 
+  const loadFolderColors = useCallback(async (): Promise<Record<string, string>> => {
+    const result = await invoke<Record<string, string>>("list_folder_colors");
+    setFolderColors(result);
+    return result;
+  }, []);
+
+  const loadFolderOrder = useCallback(async (): Promise<string[]> => {
+    const result = await invoke<string[]>("list_folder_order");
+    setFolderOrder(result);
+    return result;
+  }, []);
+
   const loadGraphData = useCallback(async (repo: string) => {
     setGraphLoading(true);
     setGraphError(null);
@@ -121,6 +135,14 @@ function App() {
   useEffect(() => {
     void loadGraphRepos();
   }, [loadGraphRepos]);
+
+  useEffect(() => {
+    void loadFolderColors();
+  }, [loadFolderColors]);
+
+  useEffect(() => {
+    void loadFolderOrder();
+  }, [loadFolderOrder]);
 
   useEffect(() => {
     if (selectedStreamId == null) {
@@ -338,6 +360,48 @@ function App() {
     }
   };
 
+  const handleDuplicateStream = async (data: StreamDuplicateInput) => {
+    const created = await invoke<Stream>("create_stream", data);
+    await loadStreams();
+    setSelectedStreamId(created.id);
+  };
+
+  const handleSetFolderColor = async (folder: string, color: string | null) => {
+    const updated = await invoke<Record<string, string>>("set_folder_color", { folder, color });
+    setFolderColors(updated);
+  };
+
+  const handleReorderStreams = async (ids: number[]) => {
+    setStreams((prev) => {
+      const byId = new Map(prev.map((s) => [s.id, s]));
+      const reordered = ids
+        .map((id, index) => {
+          const stream = byId.get(id);
+          return stream ? { ...stream, position: index } : null;
+        })
+        .filter((s): s is Stream => s != null);
+      return sortStreams(reordered);
+    });
+    try {
+      const result = await invoke<Stream[]>("reorder_streams", { ids });
+      setStreams(sortStreams(result));
+    } catch (e) {
+      setError(String(e));
+      await loadStreams();
+    }
+  };
+
+  const handleReorderFolders = async (folders: string[]) => {
+    setFolderOrder(folders);
+    try {
+      const result = await invoke<string[]>("reorder_folders", { folders });
+      setFolderOrder(result);
+    } catch (e) {
+      setError(String(e));
+      await loadFolderOrder();
+    }
+  };
+
   const selectedStream = streams.find((s) => s.id === selectedStreamId) ?? null;
 
   return (
@@ -349,6 +413,11 @@ function App() {
           onSelect={handleSelectStream}
           onCreate={openCreateModal}
           onEdit={openEditModal}
+          folderColors={folderColors}
+          onSetFolderColor={handleSetFolderColor}
+          folderOrder={folderOrder}
+          onReorderStreams={(ids) => void handleReorderStreams(ids)}
+          onReorderFolders={(folders) => void handleReorderFolders(folders)}
           graphRepos={graphRepos}
           activeGraphRepo={view.type === "graph" ? view.repo : null}
           onSelectGraphRepo={handleSelectGraphRepo}
@@ -407,6 +476,7 @@ function App() {
           onCreate={handleCreateStream}
           onUpdate={handleUpdateStream}
           onDelete={handleDeleteStream}
+          onDuplicate={handleDuplicateStream}
         />
       )}
     </div>

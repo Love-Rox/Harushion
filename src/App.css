@@ -593,10 +593,45 @@ body {
 .detail-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 20px 32px;
+  padding: 0 20px 32px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.detail-scroll > .detail-header {
+  padding-top: 16px;
+}
+
+/* スクロールしても常に見えるバー: コンテナ全幅に広げて背景透けを防ぐ */
+.detail-scroll > .detail-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  max-width: none;
+  margin: 0 -20px;
+  padding: 8px 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-sticky > * {
+  max-width: 840px;
+}
+
+.detail-sticky-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.detail-sticky-title-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .spinner {
@@ -918,13 +953,6 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  position: sticky;
-  top: 0;
-  padding: 10px 0;
-  background: var(--bg-panel);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  z-index: 10;
 }
 
 .merge-controls,

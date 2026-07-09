@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, UIEvent as ReactUIEvent } from "react";
 import type { Item, ItemAction, ItemDetail, LabelInfo, MergeMethod, Viewer } from "../types";
 import { relativeTime } from "./format";
 import { StateBadge } from "./StateBadge";
@@ -100,6 +100,8 @@ export function DetailPane({
   const [confirmMerge, setConfirmMerge] = useState(false);
   const [mergeMethod, setMergeMethod] = useState<MergeMethod>("squash");
   const [deleteBranch, setDeleteBranch] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setCommentText("");
@@ -110,7 +112,14 @@ export function DetailPane({
     setConfirmMerge(false);
     setMergeMethod("squash");
     setDeleteBranch(false);
+    // アイテム切替時はスクロール位置を先頭に戻す
+    scrollRef.current?.scrollTo({ top: 0 });
+    setScrolled(false);
   }, [item?.url]);
+
+  const handleScroll = (e: ReactUIEvent<HTMLDivElement>) => {
+    setScrolled(e.currentTarget.scrollTop > 56);
+  };
 
   useEffect(() => {
     if (!labelsOpen && !confirmClose && !confirmMerge) return;
@@ -378,9 +387,11 @@ export function DetailPane({
     return <div className="action-bar">{buttons}</div>;
   };
 
+  const actionBar = renderActionBar();
+
   return (
     <div className="detail-pane">
-      <div className="detail-scroll">
+      <div className="detail-scroll" ref={scrollRef} onScroll={handleScroll}>
         <header className="detail-header">
           <div className="detail-eyebrow">
             <span className="detail-repo">{detail.repo}</span>
@@ -406,6 +417,18 @@ export function DetailPane({
             {detail.milestone && <span className="milestone-chip">🎯 {detail.milestone}</span>}
           </div>
         </header>
+
+        {(actionBar || scrolled) && (
+          <div className="detail-sticky">
+            {scrolled && (
+              <div className="detail-sticky-title">
+                <StateBadge kind={detail.kind} state={detail.state} isDraft={detail.isDraft} size={14} />
+                <span className="detail-sticky-title-text">{detail.title}</span>
+              </div>
+            )}
+            {actionBar}
+          </div>
+        )}
 
         <div className="detail-props">
           {detail.kind === "pr" && (
@@ -546,8 +569,6 @@ export function DetailPane({
             </div>
           )}
         </div>
-
-        {renderActionBar()}
 
         {error && (
           <div className="error detail-error">

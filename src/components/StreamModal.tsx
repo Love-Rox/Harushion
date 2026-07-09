@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { COLOR_PALETTE } from "../types";
 import type { Stream } from "../types";
 import "./StreamModal.css";
 
@@ -9,9 +10,11 @@ export type StreamCreateInput = {
   query: string;
   folder: string | null;
   intervalSec: number;
+  color: string | null;
 };
 
 export type StreamUpdateInput = StreamCreateInput & { id: number; enabled: boolean };
+export type StreamDuplicateInput = StreamCreateInput;
 
 type Props = {
   stream: Stream | null; // null = create mode, Stream = edit mode
@@ -19,7 +22,15 @@ type Props = {
   onCreate: (data: StreamCreateInput) => Promise<void>;
   onUpdate: (data: StreamUpdateInput) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  onDuplicate: (data: StreamDuplicateInput) => Promise<void>;
 };
+
+const NO_TEXT_AUTOFILL = {
+  autoCapitalize: "off",
+  autoCorrect: "off",
+  spellCheck: false,
+  autoComplete: "off",
+} as const;
 
 // ---- Query builder ----
 
@@ -183,13 +194,15 @@ const DEFAULT_FORM_STATE: QueryFormState = {
   rest: "",
 };
 
-export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: Props) {
+export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete, onDuplicate }: Props) {
   const [name, setName] = useState(stream?.name ?? "");
   const [folder, setFolder] = useState(stream?.folder ?? "");
   const [intervalSec, setIntervalSec] = useState(stream?.intervalSec ?? 120);
   const [enabled, setEnabled] = useState(stream?.enabled ?? true);
+  const [color, setColor] = useState<string | null>(stream?.color ?? null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -275,6 +288,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
           folder: folder.trim() || null,
           intervalSec,
           enabled,
+          color,
         });
       } else {
         await onCreate({
@@ -282,6 +296,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
           query: query.trim(),
           folder: folder.trim() || null,
           intervalSec,
+          color,
         });
       }
       onClose();
@@ -305,6 +320,26 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
     }
   };
 
+  const handleDuplicate = async () => {
+    if (!stream || !nameValid || !queryValid || !intervalValid) return;
+    setDuplicating(true);
+    setError(null);
+    try {
+      await onDuplicate({
+        name: `${name.trim()} のコピー`,
+        query: query.trim(),
+        folder: folder.trim() || null,
+        intervalSec,
+        color,
+      });
+      onClose();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal stream-modal" onClick={(e) => e.stopPropagation()}>
@@ -318,6 +353,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
               onChange={(e) => setName(e.target.value)}
               placeholder="例: 自分宛て"
               autoFocus
+              {...NO_TEXT_AUTOFILL}
             />
           </label>
 
@@ -404,6 +440,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
                         }
                       }}
                       placeholder="owner/name"
+                      {...NO_TEXT_AUTOFILL}
                     />
                     <button type="button" className="btn btn-small" onClick={addRepo}>
                       追加
@@ -436,6 +473,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
                     value={builder.org}
                     onChange={(e) => updateBuilder({ org: e.target.value })}
                     placeholder="例: octocat-inc"
+                    {...NO_TEXT_AUTOFILL}
                   />
                 </label>
 
@@ -453,6 +491,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
                         }
                       }}
                       placeholder="例: bug"
+                      {...NO_TEXT_AUTOFILL}
                     />
                     <button type="button" className="btn btn-small" onClick={addLabel}>
                       追加
@@ -507,6 +546,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
                     value={builder.rest}
                     onChange={(e) => updateBuilder({ rest: e.target.value })}
                     placeholder="例: no:assignee"
+                    {...NO_TEXT_AUTOFILL}
                   />
                 </label>
 
@@ -519,6 +559,7 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="involves:@me sort:updated-desc"
+                {...NO_TEXT_AUTOFILL}
               />
             )}
 
@@ -536,8 +577,37 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
 
           <label className="field">
             <span className="field-label">フォルダ (任意)</span>
-            <input type="text" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="例: 仕事" />
+            <input
+              type="text"
+              value={folder}
+              onChange={(e) => setFolder(e.target.value)}
+              placeholder="例: 仕事"
+              {...NO_TEXT_AUTOFILL}
+            />
           </label>
+
+          <div className="field">
+            <span className="field-label">色</span>
+            <div className="color-swatch-row">
+              <button
+                type="button"
+                className={`color-swatch color-swatch-none${color === null ? " selected" : ""}`}
+                onClick={() => setColor(null)}
+                title="なし"
+                aria-label="色なし"
+              />
+              {COLOR_PALETTE.map((hex) => (
+                <button
+                  type="button"
+                  key={hex}
+                  className={`color-swatch${color === hex ? " selected" : ""}`}
+                  style={{ backgroundColor: `#${hex}` }}
+                  onClick={() => setColor(hex)}
+                  aria-label={`色 #${hex}`}
+                />
+              ))}
+            </div>
+          </div>
 
           <label className="field">
             <span className="field-label">更新間隔 (秒)</span>
@@ -563,6 +633,16 @@ export function StreamModal({ stream, onClose, onCreate, onUpdate, onDelete }: P
           )}
 
           <div className="modal-actions">
+            {stream && (
+              <button
+                type="button"
+                className="btn duplicate-btn"
+                onClick={() => void handleDuplicate()}
+                disabled={saving || deleting || duplicating || !nameValid || !queryValid || !intervalValid}
+              >
+                {duplicating ? "複製中…" : "複製"}
+              </button>
+            )}
             {stream &&
               (confirmingDelete ? (
                 <span className="delete-confirm">

@@ -13,7 +13,22 @@ export type Stream = {
   position: number;
   unreadCount: number;
   totalCount: number;
+  color: string | null; // hex without '#', e.g. "6366f1"
 };
+
+// Shared preset palette for stream/folder color pickers. Hex without '#'.
+export const COLOR_PALETTE: string[] = [
+  "e11d48",
+  "ea580c",
+  "ca8a04",
+  "16a34a",
+  "0d9488",
+  "0284c7",
+  "6366f1",
+  "9333ea",
+  "db2777",
+  "64748b",
+];
 
 export type Item = {
   kind: "issue" | "pr";

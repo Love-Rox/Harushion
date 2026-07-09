@@ -20,6 +20,16 @@ fn list_streams(db: State<'_, Db>) -> Result<Vec<Stream>, String> {
     db.list_streams()
 }
 
+/// 色は 6 桁 hex(# なし)のみ許可
+fn validate_color(color: &Option<String>) -> Result<(), String> {
+    match color {
+        Some(c) if c.len() != 6 || !c.chars().all(|ch| ch.is_ascii_hexdigit()) => {
+            Err(format!("不正な色指定です: {c}"))
+        }
+        _ => Ok(()),
+    }
+}
+
 #[tauri::command]
 fn create_stream(
     db: State<'_, Db>,
@@ -27,12 +37,15 @@ fn create_stream(
     query: String,
     folder: Option<String>,
     interval_sec: i64,
+    color: Option<String>,
 ) -> Result<Stream, String> {
-    let id = db.create_stream(&name, &query, folder.as_deref(), interval_sec)?;
+    validate_color(&color)?;
+    let id = db.create_stream(&name, &query, folder.as_deref(), interval_sec, color.as_deref())?;
     db.get_stream(id)
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn update_stream(
     db: State<'_, Db>,
     id: i64,
@@ -41,9 +54,44 @@ fn update_stream(
     folder: Option<String>,
     interval_sec: i64,
     enabled: bool,
+    color: Option<String>,
 ) -> Result<Stream, String> {
-    db.update_stream(id, &name, &query, folder.as_deref(), interval_sec, enabled)?;
+    validate_color(&color)?;
+    db.update_stream(id, &name, &query, folder.as_deref(), interval_sec, enabled, color.as_deref())?;
     db.get_stream(id)
+}
+
+#[tauri::command]
+fn list_folder_colors(db: State<'_, Db>) -> Result<std::collections::HashMap<String, String>, String> {
+    db.list_folder_colors()
+}
+
+#[tauri::command]
+fn reorder_streams(db: State<'_, Db>, ids: Vec<i64>) -> Result<Vec<Stream>, String> {
+    db.reorder_streams(&ids)?;
+    db.list_streams()
+}
+
+#[tauri::command]
+fn list_folder_order(db: State<'_, Db>) -> Result<Vec<String>, String> {
+    db.list_folder_order()
+}
+
+#[tauri::command]
+fn reorder_folders(db: State<'_, Db>, folders: Vec<String>) -> Result<Vec<String>, String> {
+    db.reorder_folders(&folders)?;
+    db.list_folder_order()
+}
+
+#[tauri::command]
+fn set_folder_color(
+    db: State<'_, Db>,
+    folder: String,
+    color: Option<String>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    validate_color(&color)?;
+    db.set_folder_color(&folder, color.as_deref())?;
+    db.list_folder_colors()
 }
 
 #[tauri::command]
@@ -174,7 +222,12 @@ pub fn run() {
             list_graph_repos,
             add_graph_repo,
             remove_graph_repo,
-            get_branch_graph
+            get_branch_graph,
+            list_folder_colors,
+            set_folder_color,
+            reorder_streams,
+            list_folder_order,
+            reorder_folders
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
