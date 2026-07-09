@@ -5,6 +5,9 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type {
   BranchGraph,
+  Epic,
+  EpicItem,
+  EpicSuggestion,
   Item,
   ItemAction,
   ItemDetail,
@@ -20,16 +23,23 @@ import type {
   StreamDuplicateInput,
   StreamUpdateInput,
 } from "./components/StreamModal";
+import { EpicModal } from "./components/EpicModal";
+import type { EpicCreateInput, EpicUpdateInput } from "./components/EpicModal";
+import { EpicView } from "./components/EpicView";
 import { ItemList } from "./components/ItemList";
 import { DetailPane } from "./components/DetailPane";
 import { GraphView } from "./components/GraphView";
 import { useI18n } from "./i18n";
 import "./App.css";
 
-type View = { type: "stream" } | { type: "graph"; repo: string };
+type View = { type: "stream" } | { type: "graph"; repo: string } | { type: "epic"; epicId: number };
 
 function sortStreams(streams: Stream[]): Stream[] {
   return [...streams].sort((a, b) => a.position - b.position || a.id - b.id);
+}
+
+function sortEpics(epics: Epic[]): Epic[] {
+  return [...epics].sort((a, b) => a.position - b.position || a.id - b.id);
 }
 
 function actionKey(action: ItemAction): string {
@@ -63,12 +73,21 @@ function App() {
   const [actionPending, setActionPending] = useState(false);
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
   const [repoLabels, setRepoLabels] = useState<Record<string, LabelInfo[]>>({});
+  const [itemEpicIds, setItemEpicIds] = useState<number[]>([]);
 
   const [view, setView] = useState<View>({ type: "stream" });
   const [graphRepos, setGraphRepos] = useState<string[]>([]);
   const [graphData, setGraphData] = useState<BranchGraph | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
   const [graphError, setGraphError] = useState<string | null>(null);
+
+  const [epics, setEpics] = useState<Epic[]>([]);
+  const [epicItems, setEpicItems] = useState<EpicItem[]>([]);
+  const [epicItemsLoading, setEpicItemsLoading] = useState(false);
+  const [epicRefreshing, setEpicRefreshing] = useState(false);
+  const [epicError, setEpicError] = useState<string | null>(null);
+  const [epicModalOpen, setEpicModalOpen] = useState(false);
+  const [editingEpic, setEditingEpic] = useState<Epic | null>(null);
 
   const selectedStreamIdRef = useRef<number | null>(null);
   const unreadOnlyRef = useRef(unreadOnly);
@@ -129,6 +148,34 @@ function App() {
     }
   }, []);
 
+  const loadEpics = useCallback(async (): Promise<Epic[]> => {
+    const result = await invoke<Epic[]>("list_epics");
+    const sorted = sortEpics(result);
+    setEpics(sorted);
+    return sorted;
+  }, []);
+
+  const loadEpicItems = useCallback(async (epicId: number) => {
+    setEpicItemsLoading(true);
+    try {
+      const result = await invoke<EpicItem[]>("list_epic_items", { epicId });
+      setEpicItems(result);
+    } catch (e) {
+      setEpicError(String(e));
+    } finally {
+      setEpicItemsLoading(false);
+    }
+  }, []);
+
+  const loadItemEpicIds = useCallback(async (url: string) => {
+    try {
+      const result = await invoke<number[]>("item_epic_ids", { itemUrl: url });
+      setItemEpicIds(result);
+    } catch {
+      setItemEpicIds([]);
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -161,6 +208,10 @@ function App() {
   useEffect(() => {
     void loadFolderOrder();
   }, [loadFolderOrder]);
+
+  useEffect(() => {
+    void loadEpics();
+  }, [loadEpics]);
 
   useEffect(() => {
     if (selectedStreamId == null) {
@@ -196,6 +247,7 @@ function App() {
     setSelectedItem(null);
     setItemDetail(null);
     setDetailError(null);
+    setItemEpicIds([]);
   }, [selectedStreamId]);
 
   // Selected item disappeared from the current list (e.g. filtered out): clear selection.
@@ -204,11 +256,22 @@ function App() {
       if (prev && !items.some((i) => i.url === prev.url)) {
         setItemDetail(null);
         setDetailError(null);
+        setItemEpicIds([]);
         return null;
       }
       return prev;
     });
   }, [items]);
+
+  // Switched to a different epic's view: clear detail selection.
+  const openEpicId = view.type === "epic" ? view.epicId : null;
+  useEffect(() => {
+    if (openEpicId == null) return;
+    setSelectedItem(null);
+    setItemDetail(null);
+    setDetailError(null);
+    setItemEpicIds([]);
+  }, [openEpicId]);
 
   const applyReadState = (url: string, isRead: boolean) => {
     setItems((prev) => prev.map((i) => (i.url === url ? { ...i, isRead } : i)));
@@ -231,8 +294,10 @@ function App() {
     setSelectedItem(item);
     setItemDetail(null);
     setDetailError(null);
+    setItemEpicIds([]);
     applyReadState(item.url, true);
     void loadDetail(item.url);
+    void loadItemEpicIds(item.url);
     try {
       await invoke<void>("mark_read", { itemUrl: item.url });
     } catch (e) {
@@ -443,7 +508,147 @@ function App() {
     }
   };
 
+  const handleSelectEpic = (epicId: number) => {
+    setView({ type: "epic", epicId });
+    setEpicItems([]);
+    setEpicError(null);
+    void loadEpicItems(epicId);
+  };
+
+  const openEpicCreateModal = () => {
+    setEditingEpic(null);
+    setEpicModalOpen(true);
+  };
+
+  const openEpicEditModal = (epic: Epic) => {
+    setEditingEpic(epic);
+    setEpicModalOpen(true);
+  };
+
+  const closeEpicModal = () => {
+    setEpicModalOpen(false);
+    setEditingEpic(null);
+  };
+
+  const handleCreateEpic = async (data: EpicCreateInput) => {
+    const created = await invoke<Epic>("create_epic", data);
+    await loadEpics();
+    handleSelectEpic(created.id);
+  };
+
+  const handleUpdateEpic = async (data: EpicUpdateInput) => {
+    await invoke<Epic>("update_epic", data);
+    await loadEpics();
+  };
+
+  const handleDeleteEpic = async (id: number) => {
+    await invoke<void>("delete_epic", { id });
+    await loadEpics();
+    if (view.type === "epic" && view.epicId === id) {
+      setView({ type: "stream" });
+      setEpicItems([]);
+      setEpicError(null);
+    }
+  };
+
+  const loadEpicSuggestions = useCallback(async (): Promise<EpicSuggestion[]> => {
+    return invoke<EpicSuggestion[]>("suggest_epics");
+  }, []);
+
+  const handleCreateEpicFromMilestone = async (suggestion: EpicSuggestion) => {
+    const created = await invoke<Epic>("create_epic_from_milestone", {
+      milestone: suggestion.milestone,
+      repo: suggestion.repo,
+    });
+    await loadEpics();
+    handleSelectEpic(created.id);
+  };
+
+  const handleRefreshEpicItems = async (epicId: number) => {
+    setEpicRefreshing(true);
+    setEpicError(null);
+    try {
+      const result = await invoke<EpicItem[]>("refresh_epic_items", { epicId });
+      setEpicItems(result);
+      await loadEpics();
+    } catch (e) {
+      setEpicError(String(e));
+    } finally {
+      setEpicRefreshing(false);
+    }
+  };
+
+  const handleRemoveEpicItem = async (epicId: number, itemUrl: string) => {
+    try {
+      await invoke<void>("remove_epic_item", { epicId, itemUrl });
+      await Promise.all([loadEpics(), loadEpicItems(epicId)]);
+    } catch (e) {
+      setEpicError(String(e));
+    }
+  };
+
+  const handleReorderEpicItems = async (epicId: number, urls: string[]) => {
+    setEpicItems((prev) => {
+      const byUrl = new Map(prev.map((it) => [it.url, it]));
+      return urls
+        .map((url, index) => {
+          const it = byUrl.get(url);
+          return it ? { ...it, epicPosition: index } : null;
+        })
+        .filter((it): it is EpicItem => it != null);
+    });
+    try {
+      await invoke<void>("reorder_epic_items", { epicId, urls });
+    } catch (e) {
+      setEpicError(String(e));
+      await loadEpicItems(epicId);
+    }
+  };
+
+  const handleAddItemToEpic = async (epicId: number) => {
+    if (!selectedItem) return;
+    try {
+      await invoke<void>("add_epic_item", { epicId, itemUrl: selectedItem.url });
+      await Promise.all([loadEpics(), loadItemEpicIds(selectedItem.url)]);
+      if (view.type === "epic" && view.epicId === epicId) void loadEpicItems(epicId);
+    } catch (e) {
+      setDetailError(String(e));
+    }
+  };
+
+  const handleRemoveItemFromEpic = async (epicId: number) => {
+    if (!selectedItem) return;
+    try {
+      await invoke<void>("remove_epic_item", { epicId, itemUrl: selectedItem.url });
+      await Promise.all([loadEpics(), loadItemEpicIds(selectedItem.url)]);
+      if (view.type === "epic" && view.epicId === epicId) void loadEpicItems(epicId);
+    } catch (e) {
+      setDetailError(String(e));
+    }
+  };
+
   const selectedStream = streams.find((s) => s.id === selectedStreamId) ?? null;
+  const openEpic = view.type === "epic" ? (epics.find((e) => e.id === view.epicId) ?? null) : null;
+
+  const detailPaneProps = {
+    item: selectedItem,
+    detail: itemDetail,
+    loading: detailLoading,
+    error: detailError,
+    actionPending,
+    pendingActionKey,
+    viewer,
+    epics,
+    itemEpicIds,
+    onAddToEpic: (epicId: number) => void handleAddItemToEpic(epicId),
+    onRemoveFromEpic: (epicId: number) => void handleRemoveItemFromEpic(epicId),
+    onAction: handleAction,
+    onDismissError: () => setDetailError(null),
+    onOpenUrl: handleOpenUrl,
+    onOpenInApp: handleOpenInApp,
+    onCopyUrl: handleCopyUrl,
+    loadRepoLabels,
+  };
 
   return (
     <div className="app">
@@ -495,13 +700,18 @@ function App() {
           folderOrder={folderOrder}
           onReorderStreams={(ids) => void handleReorderStreams(ids)}
           onReorderFolders={(folders) => void handleReorderFolders(folders)}
+          epics={epics}
+          activeEpicId={view.type === "epic" ? view.epicId : null}
+          onSelectEpic={handleSelectEpic}
+          onCreateEpic={openEpicCreateModal}
+          onDeleteEpic={handleDeleteEpic}
           graphRepos={graphRepos}
           activeGraphRepo={view.type === "graph" ? view.repo : null}
           onSelectGraphRepo={handleSelectGraphRepo}
           onAddGraphRepo={handleAddGraphRepo}
           onRemoveGraphRepo={(repo) => void handleRemoveGraphRepo(repo)}
         />
-        {view.type === "stream" ? (
+        {view.type === "stream" && (
           <>
             <ItemList
               stream={selectedStream}
@@ -521,23 +731,29 @@ function App() {
               onToggleRead={(item) => void handleToggleRead(item)}
               onCreateStream={openCreateModal}
             />
-            <DetailPane
-              item={selectedItem}
-              detail={itemDetail}
-              loading={detailLoading}
-              error={detailError}
-              actionPending={actionPending}
-              pendingActionKey={pendingActionKey}
-              viewer={viewer}
-              onAction={handleAction}
-              onDismissError={() => setDetailError(null)}
-              onOpenUrl={handleOpenUrl}
-              onOpenInApp={handleOpenInApp}
-              onCopyUrl={handleCopyUrl}
-              loadRepoLabels={loadRepoLabels}
-            />
+            <DetailPane {...detailPaneProps} />
           </>
-        ) : (
+        )}
+        {view.type === "epic" && (
+          <>
+            <EpicView
+              epic={openEpic}
+              items={epicItems}
+              loading={epicItemsLoading}
+              refreshing={epicRefreshing}
+              error={epicError}
+              viewer={viewer}
+              selectedItemUrl={selectedItem?.url ?? null}
+              onItemSelect={(item) => void handleSelectItem(item)}
+              onRefresh={() => void handleRefreshEpicItems(view.epicId)}
+              onEdit={() => openEpic && openEpicEditModal(openEpic)}
+              onRemoveItem={(url) => void handleRemoveEpicItem(view.epicId, url)}
+              onReorder={(urls) => void handleReorderEpicItems(view.epicId, urls)}
+            />
+            <DetailPane {...detailPaneProps} />
+          </>
+        )}
+        {view.type === "graph" && (
           <GraphView
             repo={view.repo}
             data={graphData}
@@ -556,6 +772,16 @@ function App() {
           onUpdate={handleUpdateStream}
           onDelete={handleDeleteStream}
           onDuplicate={handleDuplicateStream}
+        />
+      )}
+      {epicModalOpen && (
+        <EpicModal
+          epic={editingEpic}
+          onClose={closeEpicModal}
+          onCreate={handleCreateEpic}
+          onUpdate={handleUpdateEpic}
+          onLoadSuggestions={loadEpicSuggestions}
+          onCreateFromMilestone={handleCreateEpicFromMilestone}
         />
       )}
     </div>

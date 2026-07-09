@@ -94,6 +94,127 @@
   box-shadow: inset 0 -2px 0 0 var(--accent);
 }
 
+/* ---- Sidebar: epics section ---- */
+
+.sidebar-epics-section {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+}
+
+.sidebar-epics-empty {
+  padding: 4px 16px 8px;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+.epic-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 16px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+
+.epic-row:hover {
+  background: var(--bg);
+}
+
+.epic-row.active {
+  background: var(--bg);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+.epic-color-chip {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.epic-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.epic-progress-badge {
+  flex-shrink: 0;
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.epic-progress-badge.full {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.epic-delete {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.epic-row:hover .epic-delete {
+  opacity: 1;
+}
+
+.epic-delete:hover {
+  background: var(--border);
+}
+
+.epic-delete-confirm {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.epic-delete-confirm-btn,
+.epic-delete-cancel-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.epic-delete-confirm-btn {
+  color: var(--closed);
+  font-weight: 700;
+}
+
+.epic-delete-cancel-btn {
+  color: var(--fg-muted);
+}
+
+.epic-delete-confirm-btn:hover {
+  background: color-mix(in srgb, var(--closed) 16%, transparent);
+}
+
+.epic-delete-cancel-btn:hover {
+  background: var(--border);
+}
+
+.epic-delete-error {
+  padding: 0 10px 6px 16px;
+  margin: 0;
+}
+
 /* ---- Sidebar: locale switcher ---- */
 
 .sidebar-locale-switcher {

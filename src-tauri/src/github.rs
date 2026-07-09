@@ -145,6 +145,7 @@ pub struct Item {
     pub author_avatar: Option<String>,
     pub repo: String,
     pub comments: i64,
+    pub milestone: Option<String>,
 }
 
 pub async fn fetch_viewer(state: &AppState) -> Result<Viewer, String> {
@@ -168,12 +169,14 @@ query($q: String!, $first: Int!, $after: String) {
         author { login avatarUrl }
         repository { nameWithOwner }
         comments { totalCount }
+        milestone { title }
       }
       ... on PullRequest {
         number title url state isDraft updatedAt
         author { login avatarUrl }
         repository { nameWithOwner }
         comments { totalCount }
+        milestone { title }
       }
     }
   }
@@ -225,6 +228,7 @@ pub async fn search_items(state: &AppState, query: &str, max_total: u32) -> Resu
                     .unwrap_or_default()
                     .to_string(),
                 comments: node["comments"]["totalCount"].as_i64().unwrap_or(0),
+                milestone: node["milestone"]["title"].as_str().map(String::from),
             })
         }));
 
@@ -239,6 +243,48 @@ pub async fn search_items(state: &AppState, query: &str, max_total: u32) -> Resu
     }
 
     Ok(items)
+}
+
+/// エピック内アイテムの最新状態(バッチ取得用)
+pub struct ItemStatus {
+    pub url: String,
+    pub state: String,
+    pub is_draft: bool,
+    pub title: String,
+    pub milestone: Option<String>,
+}
+
+/// URL 群の現在状態をエイリアス付き GraphQL でまとめて取得する(40件/リクエスト)。
+pub async fn fetch_item_states(state: &AppState, urls: &[String]) -> Result<Vec<ItemStatus>, String> {
+    let mut results = Vec::with_capacity(urls.len());
+    for chunk in urls.chunks(40) {
+        let mut vars_decl = Vec::new();
+        let mut fields = Vec::new();
+        let mut variables = serde_json::Map::new();
+        for (i, url) in chunk.iter().enumerate() {
+            vars_decl.push(format!("$u{i}: URI!"));
+            fields.push(format!(
+                "i{i}: resource(url: $u{i}) {{ __typename \
+                 ... on Issue {{ url state title milestone {{ title }} }} \
+                 ... on PullRequest {{ url state isDraft title milestone {{ title }} }} }}"
+            ));
+            variables.insert(format!("u{i}"), Value::String(url.clone()));
+        }
+        let query = format!("query({}) {{ {} }}", vars_decl.join(", "), fields.join(" "));
+        let data = state.graphql(&query, Value::Object(variables)).await?;
+        for i in 0..chunk.len() {
+            let node = &data[format!("i{i}")];
+            let Some(url) = node["url"].as_str() else { continue };
+            results.push(ItemStatus {
+                url: url.to_string(),
+                state: node["state"].as_str().unwrap_or_default().to_string(),
+                is_draft: node["isDraft"].as_bool().unwrap_or(false),
+                title: node["title"].as_str().unwrap_or_default().to_string(),
+                milestone: node["milestone"]["title"].as_str().map(String::from),
+            });
+        }
+    }
+    Ok(results)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -520,6 +566,21 @@ mod tests {
         assert_eq!(items.len(), 120, "should fetch past the 50-item first page");
         let unique: std::collections::HashSet<&str> = items.iter().map(|i| i.url.as_str()).collect();
         assert_eq!(unique.len(), items.len(), "pages must not overlap");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires gh auth and network"]
+    async fn fetches_item_states_in_batch() {
+        let state = AppState::new();
+        let urls = vec![
+            "https://github.com/tauri-apps/tauri/issues/2975".to_string(),
+            "https://github.com/tauri-apps/tauri/pull/11000".to_string(),
+        ];
+        let states = fetch_item_states(&state, &urls).await.expect("batch fetch failed");
+        assert_eq!(states.len(), 2);
+        let pr = states.iter().find(|s| s.url.ends_with("/11000")).unwrap();
+        assert_eq!(pr.state, "MERGED");
+        assert!(!pr.title.is_empty());
     }
 
     #[tokio::test]

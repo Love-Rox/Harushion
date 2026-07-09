@@ -6,7 +6,7 @@ mod graph;
 mod poller;
 mod updater;
 
-use db::{Db, StoredItem, Stream};
+use db::{Db, Epic, EpicRow, EpicSuggestion, StoredItem, Stream};
 use gh::ItemAction;
 use github::{AppState, ItemDetail, LabelInfo, Viewer};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -158,6 +158,86 @@ async fn check_for_update(state: State<'_, AppState>) -> Result<Option<updater::
     updater::check_update(&state).await
 }
 
+
+#[tauri::command]
+fn list_epics(db: State<'_, Db>) -> Result<Vec<Epic>, String> {
+    db.list_epics()
+}
+
+#[tauri::command]
+fn create_epic(db: State<'_, Db>, name: String, note: Option<String>, color: Option<String>) -> Result<Epic, String> {
+    validate_color(&color)?;
+    let id = db.create_epic(&name, note.as_deref(), color.as_deref())?;
+    db.get_epic(id)
+}
+
+#[tauri::command]
+fn update_epic(db: State<'_, Db>, id: i64, name: String, note: Option<String>, color: Option<String>) -> Result<Epic, String> {
+    validate_color(&color)?;
+    db.update_epic(id, &name, note.as_deref(), color.as_deref())?;
+    db.get_epic(id)
+}
+
+#[tauri::command]
+fn delete_epic(db: State<'_, Db>, id: i64) -> Result<(), String> {
+    db.delete_epic(id)
+}
+
+#[tauri::command]
+fn list_epic_items(db: State<'_, Db>, epic_id: i64) -> Result<Vec<EpicRow>, String> {
+    db.list_epic_items(epic_id)
+}
+
+#[tauri::command]
+fn add_epic_item(db: State<'_, Db>, epic_id: i64, item_url: String) -> Result<(), String> {
+    db.add_epic_item(epic_id, &item_url)
+}
+
+#[tauri::command]
+fn remove_epic_item(db: State<'_, Db>, epic_id: i64, item_url: String) -> Result<(), String> {
+    db.remove_epic_item(epic_id, &item_url)
+}
+
+#[tauri::command]
+fn reorder_epic_items(db: State<'_, Db>, epic_id: i64, urls: Vec<String>) -> Result<(), String> {
+    db.reorder_epic_items(epic_id, &urls)
+}
+
+#[tauri::command]
+fn suggest_epics(db: State<'_, Db>) -> Result<Vec<EpicSuggestion>, String> {
+    db.suggest_epics()
+}
+
+#[tauri::command]
+fn create_epic_from_milestone(db: State<'_, Db>, milestone: String, repo: String) -> Result<Epic, String> {
+    let id = db.create_epic_from_milestone(&milestone, &repo)?;
+    db.get_epic(id)
+}
+
+#[tauri::command]
+fn item_epic_ids(db: State<'_, Db>, item_url: String) -> Result<Vec<i64>, String> {
+    db.item_epic_ids(&item_url)
+}
+
+#[tauri::command]
+async fn refresh_epic_items(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    epic_id: i64,
+) -> Result<Vec<EpicRow>, String> {
+    let urls: Vec<String> = app
+        .state::<Db>()
+        .list_epic_items(epic_id)?
+        .into_iter()
+        .map(|r| r.item.url)
+        .collect();
+    if !urls.is_empty() {
+        let states = github::fetch_item_states(&state, &urls).await?;
+        app.state::<Db>().update_item_states(&states)?;
+    }
+    app.state::<Db>().list_epic_items(epic_id)
+}
+
 #[tauri::command]
 async fn install_update(app: AppHandle) -> Result<(), String> {
     updater::install_and_restart(app).await
@@ -275,7 +355,19 @@ pub fn run() {
             list_folder_order,
             reorder_folders,
             check_for_update,
-            install_update
+            install_update,
+            list_epics,
+            create_epic,
+            update_epic,
+            delete_epic,
+            list_epic_items,
+            add_epic_item,
+            remove_epic_item,
+            reorder_epic_items,
+            suggest_epics,
+            create_epic_from_milestone,
+            item_epic_ids,
+            refresh_epic_items
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

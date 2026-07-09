@@ -1,0 +1,29 @@
+.modal.epic-modal {
+  width: 400px;
+}
+
+.epic-note-textarea {
+  resize: vertical;
+}
+
+.epic-suggestions {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.epic-suggestion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.epic-suggestion-text {
+  min-width: 0;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}

@@ -41,6 +41,7 @@ export type Item = {
   author: string | null;
   authorAvatar: string | null;
   repo: string;
+  milestone: string | null;
   comments: number;
   isRead: boolean;
 };
@@ -140,3 +141,15 @@ export type BranchGraph = {
   commits: GraphCommit[]; // DISPLAY ORDER: topological, newest first — children always appear before their parents
   laneCount: number;
 };
+
+export type Epic = {
+  id: number;
+  name: string;
+  note: string | null;
+  color: string | null; // hex without '#', same palette as streams (COLOR_PALETTE)
+  position: number;
+  itemCount: number;
+  doneCount: number; // state CLOSED or MERGED
+};
+export type EpicItem = Item & { epicPosition: number };
+export type EpicSuggestion = { milestone: string; repo: string; count: number };

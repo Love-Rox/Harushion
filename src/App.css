@@ -874,12 +874,39 @@ body {
 }
 
 .labels-row,
-.assignees-row {
+.assignees-row,
+.epics-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   position: relative;
+}
+
+.epic-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+
+.epic-add-select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.epic-add-select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .label-chip {

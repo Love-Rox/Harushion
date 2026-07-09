@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, FormEvent } from "react";
 import { COLOR_PALETTE } from "../types";
-import type { Stream } from "../types";
+import type { Epic, Stream } from "../types";
 import { useI18n } from "../i18n";
 import type { Locale } from "../i18n";
 import "./Sidebar.css";
@@ -19,6 +19,11 @@ type Props = {
   folderOrder: string[];
   onReorderStreams: (ids: number[]) => void;
   onReorderFolders: (folders: string[]) => void;
+  epics: Epic[];
+  activeEpicId: number | null;
+  onSelectEpic: (id: number) => void;
+  onCreateEpic: () => void;
+  onDeleteEpic: (id: number) => Promise<void>;
   graphRepos: string[];
   activeGraphRepo: string | null;
   onSelectGraphRepo: (repo: string) => void;
@@ -54,6 +59,11 @@ export function Sidebar({
   folderOrder,
   onReorderStreams,
   onReorderFolders,
+  epics,
+  activeEpicId,
+  onSelectEpic,
+  onCreateEpic,
+  onDeleteEpic,
   graphRepos,
   activeGraphRepo,
   onSelectGraphRepo,
@@ -69,6 +79,23 @@ export function Sidebar({
   const [colorPopoverFolder, setColorPopoverFolder] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemePreference>(getThemePreference());
   const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  const [confirmDeleteEpicId, setConfirmDeleteEpicId] = useState<number | null>(null);
+  const [deletingEpic, setDeletingEpic] = useState(false);
+  const [epicDeleteError, setEpicDeleteError] = useState<string | null>(null);
+
+  const handleConfirmDeleteEpic = async (id: number) => {
+    setDeletingEpic(true);
+    setEpicDeleteError(null);
+    try {
+      await onDeleteEpic(id);
+      setConfirmDeleteEpicId(null);
+    } catch (err) {
+      setEpicDeleteError(String(err));
+    } finally {
+      setDeletingEpic(false);
+    }
+  };
 
   const [draggedStream, setDraggedStream] = useState<{ id: number; folder: string | null } | null>(
     null,
@@ -372,6 +399,71 @@ export function Sidebar({
       <button className="sidebar-add" onClick={onCreate}>
         {t("sidebar.addStream")}
       </button>
+
+      <div className="sidebar-epics-section">
+        <div className="sidebar-section-title">{t("sidebar.epicsSectionTitle")}</div>
+        {epics.length === 0 && <p className="sidebar-epics-empty">{t("sidebar.epicsEmpty")}</p>}
+        {epics.map((epic) => {
+          const confirming = confirmDeleteEpicId === epic.id;
+          const full = epic.itemCount > 0 && epic.doneCount === epic.itemCount;
+          return (
+            <div key={epic.id} className="epic-row-wrap">
+              <div
+                className={`epic-row${epic.id === activeEpicId ? " active" : ""}`}
+                onClick={() => onSelectEpic(epic.id)}
+              >
+                {epic.color && (
+                  <span className="epic-color-chip" style={{ backgroundColor: `#${epic.color}` }} />
+                )}
+                <span className="epic-name">{epic.name}</span>
+                <span className={`epic-progress-badge${full ? " full" : ""}`}>
+                  {epic.doneCount}/{epic.itemCount}
+                </span>
+                {confirming ? (
+                  <span className="epic-delete-confirm" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="epic-delete-confirm-btn"
+                      title={t("modal.deleteConfirm")}
+                      disabled={deletingEpic}
+                      onClick={() => void handleConfirmDeleteEpic(epic.id)}
+                    >
+                      ✓
+                    </button>
+                    <button
+                      type="button"
+                      className="epic-delete-cancel-btn"
+                      title={t("common.cancel")}
+                      disabled={deletingEpic}
+                      onClick={() => setConfirmDeleteEpicId(null)}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    className="epic-delete"
+                    title={t("common.delete")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEpicDeleteError(null);
+                      setConfirmDeleteEpicId(epic.id);
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {confirming && epicDeleteError && (
+                <p className="graph-add-error epic-delete-error">{epicDeleteError}</p>
+              )}
+            </div>
+          );
+        })}
+        <button className="sidebar-add" onClick={onCreateEpic}>
+          {t("sidebar.addEpic")}
+        </button>
+      </div>
 
       <div className="sidebar-graph-section">
         <div className="sidebar-section-title">{t("sidebar.graphSectionTitle")}</div>

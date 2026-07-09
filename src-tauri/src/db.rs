@@ -37,7 +37,37 @@ pub struct StoredItem {
     pub author_avatar: Option<String>,
     pub repo: String,
     pub comments: i64,
+    pub milestone: Option<String>,
     pub is_read: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Epic {
+    pub id: i64,
+    pub name: String,
+    pub note: Option<String>,
+    pub color: Option<String>,
+    pub position: i64,
+    pub item_count: i64,
+    pub done_count: i64,
+}
+
+/// エピック内アイテム(Item 形状 + リリース順)
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EpicRow {
+    #[serde(flatten)]
+    pub item: StoredItem,
+    pub epic_position: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EpicSuggestion {
+    pub milestone: String,
+    pub repo: String,
+    pub count: i64,
 }
 
 /// ポーリング対象の Stream。first_poll のときは通知を抑制する。
@@ -71,7 +101,8 @@ CREATE TABLE IF NOT EXISTS items (
   author TEXT,
   author_avatar TEXT,
   repo TEXT NOT NULL,
-  comments INTEGER NOT NULL DEFAULT 0
+  comments INTEGER NOT NULL DEFAULT 0,
+  milestone TEXT
 );
 
 CREATE TABLE IF NOT EXISTS stream_items (
@@ -100,6 +131,21 @@ CREATE TABLE IF NOT EXISTS folder_colors (
 CREATE TABLE IF NOT EXISTS folder_order (
   folder TEXT PRIMARY KEY,
   position INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS epics (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  note TEXT,
+  color TEXT,
+  position INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS epic_items (
+  epic_id INTEGER NOT NULL REFERENCES epics(id) ON DELETE CASCADE,
+  item_url TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (epic_id, item_url)
 );
 "#;
 
@@ -195,6 +241,7 @@ impl Db {
 
         // 既存 DB へのカラム追加移行(すでに存在する場合のエラーは無視)
         let _ = conn.execute("ALTER TABLE streams ADD COLUMN color TEXT", []);
+        let _ = conn.execute("ALTER TABLE items ADD COLUMN milestone TEXT", []);
 
         // 初回起動時のシード Stream
         let count: i64 = conn
@@ -294,9 +341,10 @@ impl Db {
         let conn = self.lock();
         conn.execute("DELETE FROM streams WHERE id = ?1", params![id])
             .map_err(db_err)?;
-        // どの Stream からも参照されなくなったアイテムを掃除(read_state は FK CASCADE)
+        // どの Stream・Epic からも参照されなくなったアイテムを掃除(read_state は FK CASCADE)
         conn.execute(
-            "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)",
+            "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)
+               AND url NOT IN (SELECT item_url FROM epic_items)",
             [],
         )
         .map_err(db_err)?;
@@ -307,7 +355,7 @@ impl Db {
         let conn = self.lock();
         let sql = format!(
             "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
-                    i.author, i.author_avatar, i.repo, i.comments, {IS_READ_EXPR}
+                    i.author, i.author_avatar, i.repo, i.comments, i.milestone, {IS_READ_EXPR}
              FROM items i
              JOIN stream_items si ON si.item_url = i.url
              LEFT JOIN read_state r ON r.item_url = i.url
@@ -330,7 +378,8 @@ impl Db {
                     author_avatar: row.get(8)?,
                     repo: row.get(9)?,
                     comments: row.get(10)?,
-                    is_read: row.get(11)?,
+                    milestone: row.get(11)?,
+                    is_read: row.get(12)?,
                 })
             })
             .map_err(db_err)?
@@ -360,14 +409,14 @@ impl Db {
 
             tx.execute(
                 "INSERT INTO items (url, kind, number, title, state, is_draft, updated_at,
-                                    author, author_avatar, repo, comments)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                                    author, author_avatar, repo, comments, milestone)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                  ON CONFLICT(url) DO UPDATE SET
                    kind = excluded.kind, number = excluded.number, title = excluded.title,
                    state = excluded.state, is_draft = excluded.is_draft,
                    updated_at = excluded.updated_at, author = excluded.author,
                    author_avatar = excluded.author_avatar, repo = excluded.repo,
-                   comments = excluded.comments",
+                   comments = excluded.comments, milestone = excluded.milestone",
                 params![
                     item.url,
                     item.kind,
@@ -379,7 +428,8 @@ impl Db {
                     item.author,
                     item.author_avatar,
                     item.repo,
-                    item.comments
+                    item.comments,
+                    item.milestone
                 ],
             )
             .map_err(db_err)?;
@@ -596,7 +646,8 @@ impl Db {
         }
         if !to_remove.is_empty() {
             conn.execute(
-                "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)",
+                "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)
+                   AND url NOT IN (SELECT item_url FROM epic_items)",
                 [],
             )
             .map_err(db_err)?;
@@ -644,6 +695,225 @@ impl Db {
         Ok(pruned_streams)
     }
 
+    // ---- Epic (Issue/PR の横断グルーピングとリリース順管理) ----
+
+    pub fn list_epics(&self) -> Result<Vec<Epic>, String> {
+        let conn = self.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT e.id, e.name, e.note, e.color, e.position,
+                   (SELECT COUNT(*) FROM epic_items ei WHERE ei.epic_id = e.id),
+                   (SELECT COUNT(*) FROM epic_items ei JOIN items i ON i.url = ei.item_url
+                     WHERE ei.epic_id = e.id AND i.state IN ('CLOSED', 'MERGED'))
+                 FROM epics e ORDER BY e.position, e.id",
+            )
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], row_to_epic)
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        Ok(rows)
+    }
+
+    pub fn get_epic(&self, id: i64) -> Result<Epic, String> {
+        let conn = self.lock();
+        conn.query_row(
+            "SELECT e.id, e.name, e.note, e.color, e.position,
+               (SELECT COUNT(*) FROM epic_items ei WHERE ei.epic_id = e.id),
+               (SELECT COUNT(*) FROM epic_items ei JOIN items i ON i.url = ei.item_url
+                 WHERE ei.epic_id = e.id AND i.state IN ('CLOSED', 'MERGED'))
+             FROM epics e WHERE e.id = ?1",
+            params![id],
+            row_to_epic,
+        )
+        .map_err(db_err)
+    }
+
+    pub fn create_epic(&self, name: &str, note: Option<&str>, color: Option<&str>) -> Result<i64, String> {
+        let conn = self.lock();
+        conn.execute(
+            "INSERT INTO epics (name, note, color, position)
+             VALUES (?1, ?2, ?3, (SELECT COALESCE(MAX(position) + 1, 0) FROM epics))",
+            params![name, note, color],
+        )
+        .map_err(db_err)?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn update_epic(&self, id: i64, name: &str, note: Option<&str>, color: Option<&str>) -> Result<(), String> {
+        let conn = self.lock();
+        conn.execute(
+            "UPDATE epics SET name = ?2, note = ?3, color = ?4 WHERE id = ?1",
+            params![id, name, note, color],
+        )
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn delete_epic(&self, id: i64) -> Result<(), String> {
+        let conn = self.lock();
+        conn.execute("DELETE FROM epics WHERE id = ?1", params![id]).map_err(db_err)?;
+        conn.execute(
+            "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)
+               AND url NOT IN (SELECT item_url FROM epic_items)",
+            [],
+        )
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn list_epic_items(&self, epic_id: i64) -> Result<Vec<EpicRow>, String> {
+        let conn = self.lock();
+        let sql = format!(
+            "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
+                    i.author, i.author_avatar, i.repo, i.comments, i.milestone, {IS_READ_EXPR},
+                    ei.position
+             FROM epic_items ei
+             JOIN items i ON i.url = ei.item_url
+             LEFT JOIN read_state r ON r.item_url = i.url
+             WHERE ei.epic_id = ?1
+             ORDER BY ei.position, i.number"
+        );
+        let mut stmt = conn.prepare(&sql).map_err(db_err)?;
+        let rows = stmt
+            .query_map(params![epic_id], |row| {
+                Ok(EpicRow {
+                    item: StoredItem {
+                        kind: row.get(0)?,
+                        number: row.get(1)?,
+                        title: row.get(2)?,
+                        url: row.get(3)?,
+                        state: row.get(4)?,
+                        is_draft: row.get(5)?,
+                        updated_at: row.get(6)?,
+                        author: row.get(7)?,
+                        author_avatar: row.get(8)?,
+                        repo: row.get(9)?,
+                        comments: row.get(10)?,
+                        milestone: row.get(11)?,
+                        is_read: row.get(12)?,
+                    },
+                    epic_position: row.get(13)?,
+                })
+            })
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        Ok(rows)
+    }
+
+    pub fn add_epic_item(&self, epic_id: i64, item_url: &str) -> Result<(), String> {
+        let conn = self.lock();
+        let exists: i64 = conn
+            .query_row("SELECT COUNT(*) FROM items WHERE url = ?1", params![item_url], |r| r.get(0))
+            .map_err(db_err)?;
+        if exists == 0 {
+            return Err("このアイテムはまだ取り込まれていません".into());
+        }
+        conn.execute(
+            "INSERT OR IGNORE INTO epic_items (epic_id, item_url, position)
+             VALUES (?1, ?2, (SELECT COALESCE(MAX(position) + 1, 0) FROM epic_items WHERE epic_id = ?1))",
+            params![epic_id, item_url],
+        )
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn remove_epic_item(&self, epic_id: i64, item_url: &str) -> Result<(), String> {
+        let conn = self.lock();
+        conn.execute(
+            "DELETE FROM epic_items WHERE epic_id = ?1 AND item_url = ?2",
+            params![epic_id, item_url],
+        )
+        .map_err(db_err)?;
+        conn.execute(
+            "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)
+               AND url NOT IN (SELECT item_url FROM epic_items)",
+            [],
+        )
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    /// リリース順(配列の並び)どおりに position を振り直す
+    pub fn reorder_epic_items(&self, epic_id: i64, urls: &[String]) -> Result<(), String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(db_err)?;
+        for (position, url) in urls.iter().enumerate() {
+            tx.execute(
+                "UPDATE epic_items SET position = ?3 WHERE epic_id = ?1 AND item_url = ?2",
+                params![epic_id, url, position as i64],
+            )
+            .map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
+    }
+
+    /// 同じマイルストーン(リポジトリ単位)で2件以上あるグループをエピック候補として返す
+    pub fn suggest_epics(&self) -> Result<Vec<EpicSuggestion>, String> {
+        let conn = self.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT milestone, repo, COUNT(*) AS c FROM items
+                 WHERE milestone IS NOT NULL AND milestone != ''
+                 GROUP BY milestone, repo HAVING c >= 2
+                 ORDER BY c DESC, milestone",
+            )
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(EpicSuggestion { milestone: row.get(0)?, repo: row.get(1)?, count: row.get(2)? })
+            })
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        Ok(rows)
+    }
+
+    /// 提案からエピックを作成し、該当アイテムを番号順で一括追加する
+    pub fn create_epic_from_milestone(&self, milestone: &str, repo: &str) -> Result<i64, String> {
+        let epic_id = self.create_epic(milestone, Some(repo), None)?;
+        let conn = self.lock();
+        conn.execute(
+            "INSERT INTO epic_items (epic_id, item_url, position)
+             SELECT ?1, url, ROW_NUMBER() OVER (ORDER BY number) - 1
+             FROM items WHERE milestone = ?2 AND repo = ?3",
+            params![epic_id, milestone, repo],
+        )
+        .map_err(db_err)?;
+        Ok(epic_id)
+    }
+
+    pub fn item_epic_ids(&self, item_url: &str) -> Result<Vec<i64>, String> {
+        let conn = self.lock();
+        let mut stmt = conn
+            .prepare("SELECT epic_id FROM epic_items WHERE item_url = ?1 ORDER BY epic_id")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map(params![item_url], |row| row.get(0))
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        Ok(rows)
+    }
+
+    /// バッチ取得した最新状態を反映する(updated_at には触れない = 未読を変えない)
+    pub fn update_item_states(&self, states: &[crate::github::ItemStatus]) -> Result<(), String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(db_err)?;
+        for st in states {
+            tx.execute(
+                "UPDATE items SET state = ?2, is_draft = ?3, title = ?4, milestone = ?5 WHERE url = ?1",
+                params![st.url, st.state, st.is_draft, st.title, st.milestone],
+            )
+            .map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
+        Ok(())
+    }
+
     pub fn list_graph_repos(&self) -> Result<Vec<String>, String> {
         let conn = self.lock();
         let mut stmt = conn
@@ -686,6 +956,18 @@ impl Db {
     }
 }
 
+fn row_to_epic(row: &rusqlite::Row<'_>) -> rusqlite::Result<Epic> {
+    Ok(Epic {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        note: row.get(2)?,
+        color: row.get(3)?,
+        position: row.get(4)?,
+        item_count: row.get(5)?,
+        done_count: row.get(6)?,
+    })
+}
+
 fn row_to_stream(row: &rusqlite::Row<'_>) -> rusqlite::Result<Stream> {
     Ok(Stream {
         id: row.get(0)?,
@@ -722,6 +1004,7 @@ mod tests {
             author_avatar: None,
             repo: "o/r".into(),
             comments: 0,
+            milestone: None,
         }
     }
 
@@ -884,6 +1167,7 @@ mod tests {
             author_avatar: None,
             repo: repo.into(),
             comments: 0,
+            milestone: None,
         }
     }
 
@@ -1000,6 +1284,108 @@ mod tests {
         let all_items = db.list_items(all_stream, false).unwrap();
         assert_eq!(all_items.len(), 1);
         assert_eq!(all_items[0].state, "MERGED");
+    }
+
+
+    fn ms_item(url: &str, milestone: Option<&str>, number: i64) -> Item {
+        Item {
+            kind: "issue".into(),
+            number,
+            title: format!("title of {url}"),
+            url: url.into(),
+            state: "OPEN".into(),
+            is_draft: false,
+            updated_at: "2026-07-09T00:00:00Z".into(),
+            author: None,
+            author_avatar: None,
+            repo: "o/r".into(),
+            comments: 0,
+            milestone: milestone.map(String::from),
+        }
+    }
+
+    #[test]
+    fn epic_crud_and_progress() {
+        let db = test_db();
+        let sid = db.create_stream("s", "q", None, 60, None).unwrap();
+        db.upsert_items(sid, &[pr_item("u1", "OPEN", false, "o/r"), pr_item("u2", "MERGED", false, "o/r")]).unwrap();
+
+        let eid = db.create_epic("v1 リリース", Some("メモ"), Some("6366f1")).unwrap();
+        db.add_epic_item(eid, "u1").unwrap();
+        db.add_epic_item(eid, "u2").unwrap();
+
+        let epic = db.get_epic(eid).unwrap();
+        assert_eq!((epic.item_count, epic.done_count), (2, 1), "MERGED は done 扱い");
+
+        db.update_epic(eid, "v1", None, None).unwrap();
+        assert_eq!(db.get_epic(eid).unwrap().name, "v1");
+
+        db.delete_epic(eid).unwrap();
+        assert!(db.get_epic(eid).is_err());
+        // Stream には残っているのでアイテムは消えない
+        assert_eq!(db.list_items(sid, false).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn epic_items_keep_release_order_and_reorder() {
+        let db = test_db();
+        let sid = db.create_stream("s", "q", None, 60, None).unwrap();
+        db.upsert_items(sid, &[
+            pr_item("u1", "OPEN", false, "o/r"),
+            pr_item("u2", "OPEN", false, "o/r"),
+            pr_item("u3", "OPEN", false, "o/r"),
+        ]).unwrap();
+        let eid = db.create_epic("e", None, None).unwrap();
+        for u in ["u1", "u2", "u3"] {
+            db.add_epic_item(eid, u).unwrap();
+        }
+        let urls: Vec<String> = db.list_epic_items(eid).unwrap().into_iter().map(|r| r.item.url).collect();
+        assert_eq!(urls, ["u1", "u2", "u3"], "追加順が初期リリース順");
+
+        db.reorder_epic_items(eid, &["u3".into(), "u1".into(), "u2".into()]).unwrap();
+        let urls: Vec<String> = db.list_epic_items(eid).unwrap().into_iter().map(|r| r.item.url).collect();
+        assert_eq!(urls, ["u3", "u1", "u2"]);
+    }
+
+    #[test]
+    fn epic_items_survive_stream_deletion() {
+        let db = test_db();
+        let sid = db.create_stream("s", "q", None, 60, None).unwrap();
+        db.upsert_items(sid, &[pr_item("u1", "OPEN", false, "o/r")]).unwrap();
+        let eid = db.create_epic("e", None, None).unwrap();
+        db.add_epic_item(eid, "u1").unwrap();
+
+        // Stream を消してもエピック参照があるのでアイテムは残る
+        db.delete_stream(sid).unwrap();
+        assert_eq!(db.list_epic_items(eid).unwrap().len(), 1);
+
+        // エピックからも外すと掃除される
+        db.remove_epic_item(eid, "u1").unwrap();
+        let conn = db.lock();
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM items", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn suggests_and_creates_epic_from_milestone() {
+        let db = test_db();
+        let sid = db.create_stream("s", "q", None, 60, None).unwrap();
+        db.upsert_items(sid, &[
+            ms_item("m1", Some("v2.0"), 3),
+            ms_item("m2", Some("v2.0"), 1),
+            ms_item("m3", Some("solo"), 2),
+            ms_item("m4", None, 4),
+        ]).unwrap();
+
+        let suggestions = db.suggest_epics().unwrap();
+        assert_eq!(suggestions.len(), 1, "2件未満のグループは提案しない");
+        assert_eq!((suggestions[0].milestone.as_str(), suggestions[0].count), ("v2.0", 2));
+
+        let eid = db.create_epic_from_milestone("v2.0", "o/r").unwrap();
+        let rows = db.list_epic_items(eid).unwrap();
+        let urls: Vec<&str> = rows.iter().map(|r| r.item.url.as_str()).collect();
+        assert_eq!(urls, ["m2", "m1"], "番号昇順で初期リリース順が付く");
+        assert_eq!(db.item_epic_ids("m1").unwrap(), [eid]);
     }
 
     #[test]

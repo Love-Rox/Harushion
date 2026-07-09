@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, UIEvent as ReactUIEvent } from "react";
-import type { Item, ItemAction, ItemDetail, LabelInfo, MergeMethod, Viewer } from "../types";
+import type { Epic, Item, ItemAction, ItemDetail, LabelInfo, MergeMethod, Viewer } from "../types";
 import { relativeTime } from "./format";
 import { StateBadge } from "./StateBadge";
 import { useI18n } from "../i18n";
@@ -14,6 +14,10 @@ type Props = {
   actionPending: boolean;
   pendingActionKey: string | null;
   viewer: Viewer | null;
+  epics: Epic[];
+  itemEpicIds: number[];
+  onAddToEpic: (epicId: number) => void;
+  onRemoveFromEpic: (epicId: number) => void;
   onAction: (action: ItemAction) => Promise<boolean>;
   onDismissError: () => void;
   onOpenUrl: (url: string) => void;
@@ -86,6 +90,10 @@ export function DetailPane({
   actionPending,
   pendingActionKey,
   viewer,
+  epics,
+  itemEpicIds,
+  onAddToEpic,
+  onRemoveFromEpic,
   onAction,
   onDismissError,
   onOpenUrl,
@@ -671,6 +679,53 @@ export function DetailPane({
                     ? label("detail.unassign", "assignMe")
                     : label("detail.assignMe", "assignMe")}
                 </button>
+              )}
+            </div>
+          </div>
+
+          <div className="prop-row">
+            <span className="prop-label">{t("detail.epics")}</span>
+            <div className="prop-value epics-row">
+              {epics.length === 0 && <span className="fg-muted">{t("detail.noEpicsHint")}</span>}
+              {epics
+                .filter((e) => itemEpicIds.includes(e.id))
+                .map((e) => (
+                  <span
+                    key={e.id}
+                    className="epic-chip"
+                    style={
+                      e.color ? { borderColor: `#${e.color}`, color: `#${e.color}` } : undefined
+                    }
+                  >
+                    {e.name}
+                    <button
+                      type="button"
+                      className="chip-remove"
+                      onClick={() => onRemoveFromEpic(e.id)}
+                      aria-label={t("detail.removeFromEpic", { name: e.name })}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              {epics.some((e) => !itemEpicIds.includes(e.id)) && (
+                <select
+                  className="epic-add-select"
+                  value=""
+                  onChange={(e) => {
+                    const id = Number(e.target.value);
+                    if (id) onAddToEpic(id);
+                  }}
+                >
+                  <option value="">{t("detail.addToEpic")}</option>
+                  {epics
+                    .filter((e) => !itemEpicIds.includes(e.id))
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name}
+                      </option>
+                    ))}
+                </select>
               )}
             </div>
           </div>
