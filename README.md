@@ -42,5 +42,5 @@ npm run build
 | M1 | Stream CRUD・ポーリング・SQLite・未読管理・通知 | ✅ |
 | M2 | 詳細ペインと GitHub 操作(gh でできることを網羅) | ✅ |
 | M3 | アプリ内ブラウザ統合(WebviewWindow 方式) | ✅ |
-| M4 | ブランチグラフ | 予定 |
+| M4 | ブランチグラフ | ✅ |
 | M5 | 配布(mac 署名 → Windows/Linux) | 予定 |

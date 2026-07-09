@@ -1114,3 +1114,290 @@ body {
   margin: 8px 0;
   padding-left: 24px;
 }
+
+/* ---- Sidebar: branch graph section ---- */
+
+.sidebar-graph-section {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+}
+
+.sidebar-section-title {
+  padding: 6px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sidebar-graph-empty {
+  padding: 4px 16px 8px;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+.graph-repo-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 16px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+
+.graph-repo-row:hover {
+  background: var(--bg);
+}
+
+.graph-repo-row.active {
+  background: var(--bg);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+.graph-repo-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.graph-repo-remove {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.graph-repo-row:hover .graph-repo-remove {
+  opacity: 1;
+}
+
+.graph-repo-remove:hover {
+  background: var(--border);
+}
+
+.graph-add-form {
+  margin: 6px 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.graph-add-form input {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.graph-add-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.graph-add-error {
+  color: var(--closed);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.graph-add-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ---- Graph view ---- */
+
+.graph-view {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.graph-header .query {
+  max-width: none;
+}
+
+.graph-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.graph-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+}
+
+.branch-strip {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.branch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.branch-chip-default {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.branch-chip-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+}
+
+.branch-chip-diff {
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.branch-chip-default .branch-chip-diff {
+  color: var(--accent);
+}
+
+.branch-chip-pr,
+.commit-pr-chip {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+}
+
+.branch-chip-pr:hover,
+.commit-pr-chip:hover {
+  border-color: var(--accent);
+}
+
+.commit-graph {
+  display: flex;
+  padding: 4px 16px 16px 8px;
+}
+
+.commit-rail {
+  flex-shrink: 0;
+  display: block;
+}
+
+.commit-rows {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.commit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.commit-message {
+  flex: 1;
+  min-width: 60px;
+  background: none;
+  border: none;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.commit-message:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.commit-tips {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.commit-tip-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.branch-tip-chip {
+  border: 1px solid;
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 15px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+}
+
+.commit-oid {
+  flex-shrink: 0;
+  width: 56px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--fg-muted);
+}
+
+.commit-author {
+  flex-shrink: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}
+
+.commit-time {
+  flex-shrink: 0;
+  width: 60px;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}

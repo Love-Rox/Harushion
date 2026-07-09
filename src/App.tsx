@@ -2,13 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { Item, ItemAction, ItemDetail, LabelInfo, Stream, Viewer } from "./types";
+import type { BranchGraph, Item, ItemAction, ItemDetail, LabelInfo, Stream, Viewer } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { StreamModal } from "./components/StreamModal";
 import type { StreamCreateInput, StreamUpdateInput } from "./components/StreamModal";
 import { ItemList } from "./components/ItemList";
 import { DetailPane } from "./components/DetailPane";
+import { GraphView } from "./components/GraphView";
 import "./App.css";
+
+type View = { type: "stream" } | { type: "graph"; repo: string };
 
 function sortStreams(streams: Stream[]): Stream[] {
   return [...streams].sort((a, b) => a.position - b.position || a.id - b.id);
@@ -41,6 +44,12 @@ function App() {
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
   const [repoLabels, setRepoLabels] = useState<Record<string, LabelInfo[]>>({});
 
+  const [view, setView] = useState<View>({ type: "stream" });
+  const [graphRepos, setGraphRepos] = useState<string[]>([]);
+  const [graphData, setGraphData] = useState<BranchGraph | null>(null);
+  const [graphLoading, setGraphLoading] = useState(false);
+  const [graphError, setGraphError] = useState<string | null>(null);
+
   const selectedStreamIdRef = useRef<number | null>(null);
   const unreadOnlyRef = useRef(unreadOnly);
   useEffect(() => {
@@ -69,6 +78,25 @@ function App() {
     }
   }, []);
 
+  const loadGraphRepos = useCallback(async (): Promise<string[]> => {
+    const result = await invoke<string[]>("list_graph_repos");
+    setGraphRepos(result);
+    return result;
+  }, []);
+
+  const loadGraphData = useCallback(async (repo: string) => {
+    setGraphLoading(true);
+    setGraphError(null);
+    try {
+      const result = await invoke<BranchGraph>("get_branch_graph", { repo });
+      setGraphData(result);
+    } catch (e) {
+      setGraphError(String(e));
+    } finally {
+      setGraphLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -89,6 +117,10 @@ function App() {
       }
     })();
   }, [loadStreams]);
+
+  useEffect(() => {
+    void loadGraphRepos();
+  }, [loadGraphRepos]);
 
   useEffect(() => {
     if (selectedStreamId == null) {
@@ -240,6 +272,38 @@ function App() {
     }
   };
 
+  const handleSelectStream = (id: number) => {
+    setView({ type: "stream" });
+    setSelectedStreamId(id);
+  };
+
+  const handleSelectGraphRepo = (repo: string) => {
+    setView({ type: "graph", repo });
+    setGraphData(null);
+    setGraphError(null);
+    void loadGraphData(repo);
+  };
+
+  const handleAddGraphRepo = async (repo: string) => {
+    const updated = await invoke<string[]>("add_graph_repo", { repo });
+    setGraphRepos(updated);
+    handleSelectGraphRepo(repo);
+  };
+
+  const handleRemoveGraphRepo = async (repo: string) => {
+    const updated = await invoke<string[]>("remove_graph_repo", { repo });
+    setGraphRepos(updated);
+    if (view.type === "graph" && view.repo === repo) {
+      setView({ type: "stream" });
+      setGraphData(null);
+      setGraphError(null);
+    }
+  };
+
+  const handleRefreshGraph = () => {
+    if (view.type === "graph") void loadGraphData(view.repo);
+  };
+
   const openCreateModal = () => {
     setEditingStream(null);
     setModalOpen(true);
@@ -282,41 +346,59 @@ function App() {
         <Sidebar
           streams={streams}
           selectedStreamId={selectedStreamId}
-          onSelect={setSelectedStreamId}
+          onSelect={handleSelectStream}
           onCreate={openCreateModal}
           onEdit={openEditModal}
+          graphRepos={graphRepos}
+          activeGraphRepo={view.type === "graph" ? view.repo : null}
+          onSelectGraphRepo={handleSelectGraphRepo}
+          onAddGraphRepo={handleAddGraphRepo}
+          onRemoveGraphRepo={(repo) => void handleRemoveGraphRepo(repo)}
         />
-        <ItemList
-          stream={selectedStream}
-          items={items}
-          loading={loading || itemsLoading}
-          error={error}
-          unreadOnly={unreadOnly}
-          onToggleUnreadOnly={() => setUnreadOnly((v) => !v)}
-          onMarkAllRead={() => void handleMarkAllRead()}
-          onPollNow={() => void handlePollNow()}
-          polling={polling}
-          viewer={viewer}
-          selectedItemUrl={selectedItem?.url ?? null}
-          onItemSelect={(item) => void handleSelectItem(item)}
-          onItemOpenInBrowser={handleOpenInBrowser}
-          onToggleRead={(item) => void handleToggleRead(item)}
-          onCreateStream={openCreateModal}
-        />
-        <DetailPane
-          item={selectedItem}
-          detail={itemDetail}
-          loading={detailLoading}
-          error={detailError}
-          actionPending={actionPending}
-          pendingActionKey={pendingActionKey}
-          viewer={viewer}
-          onAction={handleAction}
-          onDismissError={() => setDetailError(null)}
-          onOpenUrl={handleOpenUrl}
-          onOpenInApp={handleOpenInApp}
-          loadRepoLabels={loadRepoLabels}
-        />
+        {view.type === "stream" ? (
+          <>
+            <ItemList
+              stream={selectedStream}
+              items={items}
+              loading={loading || itemsLoading}
+              error={error}
+              unreadOnly={unreadOnly}
+              onToggleUnreadOnly={() => setUnreadOnly((v) => !v)}
+              onMarkAllRead={() => void handleMarkAllRead()}
+              onPollNow={() => void handlePollNow()}
+              polling={polling}
+              viewer={viewer}
+              selectedItemUrl={selectedItem?.url ?? null}
+              onItemSelect={(item) => void handleSelectItem(item)}
+              onItemOpenInBrowser={handleOpenInBrowser}
+              onToggleRead={(item) => void handleToggleRead(item)}
+              onCreateStream={openCreateModal}
+            />
+            <DetailPane
+              item={selectedItem}
+              detail={itemDetail}
+              loading={detailLoading}
+              error={detailError}
+              actionPending={actionPending}
+              pendingActionKey={pendingActionKey}
+              viewer={viewer}
+              onAction={handleAction}
+              onDismissError={() => setDetailError(null)}
+              onOpenUrl={handleOpenUrl}
+              onOpenInApp={handleOpenInApp}
+              loadRepoLabels={loadRepoLabels}
+            />
+          </>
+        ) : (
+          <GraphView
+            repo={view.repo}
+            data={graphData}
+            loading={graphLoading}
+            error={graphError}
+            onRefresh={handleRefreshGraph}
+            onOpenInApp={handleOpenInApp}
+          />
+        )}
       </div>
       {modalOpen && (
         <StreamModal

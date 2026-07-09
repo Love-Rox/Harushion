@@ -89,3 +89,32 @@ export type ItemAction =
   | { type: "updateBranch" }
   | { type: "editLabels"; add: string[]; remove: string[] }
   | { type: "assignMe"; remove: boolean };
+
+export type GraphPr = { number: number; title: string; url: string };
+export type GraphBranch = {
+  name: string;
+  tipOid: string;
+  isDefault: boolean;
+  ahead: number; // commits this branch is ahead of the default branch
+  behind: number; // commits behind the default branch
+  pr: GraphPr | null; // open PR whose head is this branch, if any
+};
+export type GraphCommit = {
+  oid: string;
+  shortOid: string;
+  message: string; // headline only
+  author: string | null;
+  authorAvatar: string | null;
+  date: string; // ISO8601
+  lane: number; // 0-based lane index, precomputed by backend
+  parents: string[]; // parent oids; may reference commits NOT present in `commits` (history cutoff)
+  branchTips: string[]; // branch names whose tip is this commit
+  url: string; // commit page on github.com
+};
+export type BranchGraph = {
+  repo: string;
+  defaultBranch: string;
+  branches: GraphBranch[]; // default branch first, then by tip date desc
+  commits: GraphCommit[]; // DISPLAY ORDER: topological, newest first — children always appear before their parents
+  laneCount: number;
+};

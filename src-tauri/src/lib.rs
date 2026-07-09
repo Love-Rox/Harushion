@@ -2,6 +2,7 @@ mod browser;
 mod db;
 mod gh;
 mod github;
+mod graph;
 mod poller;
 
 use db::{Db, StoredItem, Stream};
@@ -92,6 +93,32 @@ async fn open_in_app_browser(app: AppHandle, url: String) -> Result<(), String> 
 }
 
 #[tauri::command]
+fn list_graph_repos(db: State<'_, Db>) -> Result<Vec<String>, String> {
+    db.list_graph_repos()
+}
+
+#[tauri::command]
+fn add_graph_repo(db: State<'_, Db>, repo: String) -> Result<Vec<String>, String> {
+    graph::validate_repo(&repo)?;
+    db.add_graph_repo(&repo)?;
+    db.list_graph_repos()
+}
+
+#[tauri::command]
+fn remove_graph_repo(db: State<'_, Db>, repo: String) -> Result<Vec<String>, String> {
+    db.remove_graph_repo(&repo)?;
+    db.list_graph_repos()
+}
+
+#[tauri::command]
+async fn get_branch_graph(
+    state: State<'_, AppState>,
+    repo: String,
+) -> Result<graph::BranchGraph, String> {
+    graph::fetch_branch_graph(&state, &repo).await
+}
+
+#[tauri::command]
 async fn poll_stream_now(app: AppHandle, stream_id: i64) -> Result<usize, String> {
     let stream = app.state::<Db>().get_due_stream(stream_id)?;
     // 手動更新はユーザーが画面を見ているので OS 通知しない
@@ -143,7 +170,11 @@ pub fn run() {
             get_item_detail,
             item_action,
             list_repo_labels,
-            open_in_app_browser
+            open_in_app_browser,
+            list_graph_repos,
+            add_graph_repo,
+            remove_graph_repo,
+            get_branch_graph
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

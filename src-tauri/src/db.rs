@@ -85,6 +85,11 @@ CREATE TABLE IF NOT EXISTS read_state (
 );
 
 CREATE INDEX IF NOT EXISTS idx_items_updated_at ON items(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS graph_repos (
+  repo TEXT PRIMARY KEY,
+  position INTEGER NOT NULL DEFAULT 0
+);
 "#;
 
 // 既読判定: read_state があり、既読にした時点の updated_at 以降更新されていないこと
@@ -384,6 +389,37 @@ impl Db {
         .map_err(db_err)
     }
 
+    pub fn list_graph_repos(&self) -> Result<Vec<String>, String> {
+        let conn = self.lock();
+        let mut stmt = conn
+            .prepare("SELECT repo FROM graph_repos ORDER BY position, repo")
+            .map_err(db_err)?;
+        let rows = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(db_err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_err)?;
+        Ok(rows)
+    }
+
+    pub fn add_graph_repo(&self, repo: &str) -> Result<(), String> {
+        let conn = self.lock();
+        conn.execute(
+            "INSERT OR IGNORE INTO graph_repos (repo, position)
+             VALUES (?1, (SELECT COALESCE(MAX(position) + 1, 0) FROM graph_repos))",
+            params![repo],
+        )
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub fn remove_graph_repo(&self, repo: &str) -> Result<(), String> {
+        let conn = self.lock();
+        conn.execute("DELETE FROM graph_repos WHERE repo = ?1", params![repo])
+            .map_err(db_err)?;
+        Ok(())
+    }
+
     pub fn set_polled(&self, id: i64, now: i64) -> Result<(), String> {
         let conn = self.lock();
         conn.execute(
@@ -577,6 +613,18 @@ mod tests {
         let due = db.due_streams(1060).unwrap();
         assert_eq!(due.len(), 1, "past interval");
         assert!(!due[0].first_poll);
+    }
+
+    #[test]
+    fn graph_repos_roundtrip_preserves_order_and_dedupes() {
+        let db = test_db();
+        db.add_graph_repo("o/b").unwrap();
+        db.add_graph_repo("o/a").unwrap();
+        db.add_graph_repo("o/b").unwrap(); // 重複は無視
+        assert_eq!(db.list_graph_repos().unwrap(), ["o/b", "o/a"]);
+
+        db.remove_graph_repo("o/b").unwrap();
+        assert_eq!(db.list_graph_repos().unwrap(), ["o/a"]);
     }
 
     #[test]
