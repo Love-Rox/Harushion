@@ -16,10 +16,11 @@ GitHub の Issue/PR を Stream(検索クエリ)単位でウォッチするデス
 
 ```sh
 brew tap love-rox/tap
-brew install --cask --no-quarantine harushion
+HOMEBREW_CASK_OPTS=--no-quarantine brew install --cask harushion
 ```
 
 無署名配布のため `--no-quarantine` を推奨します(付けない場合は初回起動時に右クリック → 開く)。
+Homebrew 6 以降は `--no-quarantine` を CLI フラグとして受け付けないため、上記のように `HOMEBREW_CASK_OPTS` 環境変数で指定します(旧バージョンでも有効)。
 更新は `brew upgrade --cask harushion`。新しいバージョンが出るとアプリ内バナーでも通知されます。
 
 ## インストール (Windows / Linux)
