@@ -3,6 +3,7 @@ name = "harushion"
 version = "0.1.1"
 description = "GitHub issue/PR watcher built with Tauri"
 authors = ["sasagar"]
+license = "MIT"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
