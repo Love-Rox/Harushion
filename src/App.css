@@ -618,10 +618,6 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-.detail-sticky > * {
-  max-width: 840px;
-}
-
 .detail-sticky-title {
   display: flex;
   align-items: center;
@@ -1114,10 +1110,6 @@ body {
 .rs-changes_requested {
   color: var(--closed);
   border-color: var(--closed);
-}
-
-.detail-scroll > * {
-  max-width: 840px;
 }
 
 .detail-body-section {
