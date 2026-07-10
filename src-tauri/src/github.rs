@@ -385,6 +385,17 @@ query($url: URI!) {
         totalCount
         nodes { number title url state isDraft repository { nameWithOwner } }
       }
+      timelineItems(last: 20, itemTypes: [CROSS_REFERENCED_EVENT]) {
+        nodes {
+          ... on CrossReferencedEvent {
+            source {
+              __typename
+              ... on Issue { number title url state repository { nameWithOwner } }
+              ... on PullRequest { number title url state isDraft repository { nameWithOwner } }
+            }
+          }
+        }
+      }
       comments(last: 30) {
         totalCount
         nodes { author { login avatarUrl } bodyHTML createdAt }
@@ -402,6 +413,17 @@ query($url: URI!) {
       closingIssuesReferences(first: 10) {
         totalCount
         nodes { number title url state repository { nameWithOwner } }
+      }
+      timelineItems(last: 20, itemTypes: [CROSS_REFERENCED_EVENT]) {
+        nodes {
+          ... on CrossReferencedEvent {
+            source {
+              __typename
+              ... on Issue { number title url state repository { nameWithOwner } }
+              ... on PullRequest { number title url state isDraft repository { nameWithOwner } }
+            }
+          }
+        }
       }
       latestReviews(first: 15) { nodes { author { login } state } }
       commits(last: 1) {
@@ -480,14 +502,13 @@ fn parse_checks(node: &Value) -> Vec<CheckInfo> {
 
 /// Development リンク(Issue⇔PR)。Issue 側は「この Issue を閉じる PR」、
 /// PR 側は「この PR が閉じる Issue」で、向きによってフィールド名と相手の kind が変わる
-fn parse_related(node: &Value, kind: &str) -> (Vec<RelatedItem>, i64) {
+fn parse_related(node: &Value, kind: &str) -> Vec<RelatedItem> {
     let (key, related_kind) = if kind == "issue" {
         ("closedByPullRequestsReferences", "pr")
     } else {
         ("closingIssuesReferences", "issue")
     };
-    let total = node[key]["totalCount"].as_i64().unwrap_or(0);
-    let related = node[key]["nodes"]
+    node[key]["nodes"]
         .as_array()
         .map(|nodes| {
             nodes
@@ -508,8 +529,117 @@ fn parse_related(node: &Value, kind: &str) -> (Vec<RelatedItem>, i64) {
                 })
                 .collect()
         })
-        .unwrap_or_default();
-    (related, total)
+        .unwrap_or_default()
+}
+
+/// timeline の相互参照イベント(この Issue/PR にどこかから言及したアイテム)。
+/// 閲覧権限のない source は空オブジェクトで返るので filter_map で落ちる
+fn parse_cross_refs(node: &Value) -> Vec<RelatedItem> {
+    node["timelineItems"]["nodes"]
+        .as_array()
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|n| {
+                    let s = &n["source"];
+                    let kind = match s["__typename"].as_str()? {
+                        "Issue" => "issue",
+                        "PullRequest" => "pr",
+                        _ => return None,
+                    };
+                    Some(RelatedItem {
+                        kind: kind.to_string(),
+                        number: s["number"].as_i64()?,
+                        title: s["title"].as_str()?.to_string(),
+                        url: s["url"].as_str()?.to_string(),
+                        state: s["state"].as_str().unwrap_or_default().to_string(),
+                        is_draft: s["isDraft"].as_bool().unwrap_or(false),
+                        repo: s["repository"]["nameWithOwner"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// GitHub 描画済み本文 HTML から、他の Issue/PR への言及リンクを抽出する。
+/// クエリ・フラグメントは無視して正規形に直し、自分自身と重複は除く
+fn extract_referenced_urls(body_html: &str, self_url: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    let mut rest = body_html;
+    while let Some(pos) = rest.find("href=\"") {
+        rest = &rest[pos + 6..];
+        let Some(end) = rest.find('"') else { break };
+        let href = &rest[..end];
+        rest = &rest[end..];
+        let Some(path) = href.strip_prefix("https://github.com/") else {
+            continue;
+        };
+        let path = path.split(['?', '#']).next().unwrap_or(path);
+        let segs: Vec<&str> = path.split('/').collect();
+        if segs.len() != 4 || !(segs[2] == "issues" || segs[2] == "pull") {
+            continue;
+        }
+        if segs[3].is_empty() || !segs[3].bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        let canonical = format!("https://github.com/{}/{}/{}/{}", segs[0], segs[1], segs[2], segs[3]);
+        if canonical != self_url && !urls.contains(&canonical) {
+            urls.push(canonical);
+        }
+    }
+    urls
+}
+
+/// 本文から抽出した言及先 URL を RelatedItem に解決する(エイリアス付き一括取得)。
+/// 削除済み・権限外のリソースは null で返るので単に落ちる
+async fn resolve_related_urls(state: &AppState, urls: &[String]) -> Result<Vec<RelatedItem>, String> {
+    if urls.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut vars_decl = Vec::new();
+    let mut fields = Vec::new();
+    let mut variables = serde_json::Map::new();
+    for (i, url) in urls.iter().enumerate() {
+        vars_decl.push(format!("$u{i}: URI!"));
+        fields.push(format!(
+            "i{i}: resource(url: $u{i}) {{ __typename \
+             ... on Issue {{ number title url state repository {{ nameWithOwner }} }} \
+             ... on PullRequest {{ number title url state isDraft repository {{ nameWithOwner }} }} }}"
+        ));
+        variables.insert(format!("u{i}"), Value::String(url.clone()));
+    }
+    let query = format!("query({}) {{ {} }}", vars_decl.join(", "), fields.join(" "));
+    let data = state.graphql(&query, Value::Object(variables)).await?;
+    let mut results = Vec::new();
+    for i in 0..urls.len() {
+        let node = &data[format!("i{i}")];
+        let kind = match node["__typename"].as_str() {
+            Some("Issue") => "issue",
+            Some("PullRequest") => "pr",
+            _ => continue,
+        };
+        let Some(number) = node["number"].as_i64() else { continue };
+        let (Some(title), Some(item_url)) = (node["title"].as_str(), node["url"].as_str()) else {
+            continue;
+        };
+        results.push(RelatedItem {
+            kind: kind.to_string(),
+            number,
+            title: title.to_string(),
+            url: item_url.to_string(),
+            state: node["state"].as_str().unwrap_or_default().to_string(),
+            is_draft: node["isDraft"].as_bool().unwrap_or(false),
+            repo: node["repository"]["nameWithOwner"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
+        });
+    }
+    Ok(results)
 }
 
 pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail, String> {
@@ -562,7 +692,37 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
         .unwrap_or_default();
 
     let (comments, comments_total) = parse_comments(node);
-    let (related, related_total) = parse_related(node, kind);
+
+    // 関連 = Development リンク + 本文で言及した相手 + 自分に言及した相手(URL で重複排除)。
+    // 本文言及の解決失敗で詳細表示全体を壊さないよう、そこだけベストエフォート
+    let self_url = node["url"].as_str().unwrap_or(url).to_string();
+    let dev_related = parse_related(node, kind);
+    let incoming = parse_cross_refs(node);
+    let mut outgoing_urls =
+        extract_referenced_urls(node["bodyHTML"].as_str().unwrap_or_default(), &self_url);
+    let known: std::collections::HashSet<&str> = dev_related
+        .iter()
+        .chain(incoming.iter())
+        .map(|r| r.url.as_str())
+        .collect();
+    outgoing_urls.retain(|u| !known.contains(u.as_str()));
+    outgoing_urls.truncate(10);
+    let outgoing = match resolve_related_urls(state, &outgoing_urls).await {
+        Ok(items) => items,
+        Err(e) => {
+            eprintln!("関連リンクの解決に失敗: {e}");
+            Vec::new()
+        }
+    };
+    let mut related: Vec<RelatedItem> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for r in dev_related.into_iter().chain(outgoing).chain(incoming) {
+        if r.url != self_url && seen.insert(r.url.clone()) {
+            related.push(r);
+        }
+    }
+    let related_total = related.len() as i64;
+    related.truncate(10);
 
     Ok(ItemDetail {
         kind: kind.to_string(),
@@ -663,6 +823,30 @@ mod tests {
         assert!(!detail.body_html.is_empty());
         assert!(detail.comments_total > 0);
         assert!(!detail.comments.is_empty());
+        // この Issue は他の Issue から複数回言及されている(相互参照メンションの実データ検証)
+        assert!(!detail.related.is_empty(), "相互参照メンションが取れるはず");
+    }
+
+    #[test]
+    fn extracts_mentioned_item_urls_from_body_html() {
+        let body = r##"<p>
+            <a href="https://github.com/o/r/issues/12">#12</a>
+            <a href="https://github.com/o/r/pull/34#issuecomment-99">comment link</a>
+            <a href="https://github.com/o/r/issues/12?foo=1">duplicate</a>
+            <a href="https://github.com/o/r/issues/56">self</a>
+            <a href="https://github.com/o/r">repo root</a>
+            <a href="https://github.com/o/r/compare/a...b">compare</a>
+            <a href="https://example.com/o/r/issues/78">other host</a>
+            <a href="https://github.com/o/r/issues/abc">not a number</a>
+        </p>"##;
+        let urls = extract_referenced_urls(body, "https://github.com/o/r/issues/56");
+        assert_eq!(
+            urls,
+            vec![
+                "https://github.com/o/r/issues/12".to_string(),
+                "https://github.com/o/r/pull/34".to_string(),
+            ]
+        );
     }
 
     #[tokio::test]
