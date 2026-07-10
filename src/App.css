@@ -1773,13 +1773,3 @@ body {
 .query-toggle:hover {
   color: var(--fg);
 }
-
-.query-summary {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-weight: 400;
-  color: var(--fg-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}

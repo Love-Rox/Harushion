@@ -138,12 +138,6 @@ export function ItemList({
           >
             <span className={`folder-arrow${queryOpen ? "" : " collapsed"}`}>▾</span>
             {t("list.queryLabel")}
-            {!queryOpen && (
-              <code className="query-summary">
-                {stream.query.split("\n")[0]}
-                {stream.query.includes("\n") && ` +${stream.query.split("\n").length - 1}`}
-              </code>
-            )}
           </button>
         )}
         {stream && queryOpen && (
