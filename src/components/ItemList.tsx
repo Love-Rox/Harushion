@@ -2,7 +2,7 @@ import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tau
 import { useEffect, useRef, useState } from "react";
 import type { Epic, Item, Stream, Viewer } from "../types";
 import { relativeTime } from "./format";
-import { StateBadge } from "./StateBadge";
+import { COMMENT_ICON, LINK_ICON, Octicon, StateBadge } from "./StateBadge";
 import { useI18n } from "../i18n";
 
 /** 無限スクロールの1ページあたりの描画件数 */
@@ -208,13 +208,31 @@ export function ItemList({
                   <span className="read-dot" />
                 </button>
                 <button className="item-open" onClick={() => onItemSelect(item)} title={item.title}>
-                  <StateBadge
-                    kind={item.kind}
-                    state={item.state}
-                    isDraft={item.isDraft}
-                    size={16}
-                    layout="column"
-                  />
+                  <span className="item-state-col">
+                    <StateBadge
+                      kind={item.kind}
+                      state={item.state}
+                      isDraft={item.isDraft}
+                      size={16}
+                      layout="column"
+                    />
+                    {(item.comments > 0 || item.relatedCount > 0) && (
+                      <span className="item-counts">
+                        {item.comments > 0 && (
+                          <span className="item-count">
+                            <Octicon paths={COMMENT_ICON} size={11} />
+                            {item.comments}
+                          </span>
+                        )}
+                        {item.relatedCount > 0 && (
+                          <span className="item-count">
+                            <Octicon paths={LINK_ICON} size={11} />
+                            {item.relatedCount}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </span>
                   <span className="item-main">
                     <span className="item-title">{item.title}</span>
                     <span className="item-meta">
@@ -225,8 +243,6 @@ export function ItemList({
                       {item.author && <> · {item.author}</>}
                       {" · "}
                       {relativeTime(item.updatedAt)}
-                      {item.comments > 0 && <> · 💬{item.comments}</>}
-                      {item.relatedCount > 0 && <> · 🔗{item.relatedCount}</>}
                     </span>
                     {item.epicIds.length > 0 && (
                       <span className="item-epic-tags">
