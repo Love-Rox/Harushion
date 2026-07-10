@@ -98,8 +98,8 @@ export function ItemList({
   return (
     <div className="main">
       <header className="header list-header">
+        <h1 className="app-title list-header-title">{stream ? stream.name : "Harushion"}</h1>
         <div className="list-header-top">
-          <h1 className="app-title list-header-title">{stream ? stream.name : "Harushion"}</h1>
           <div className="header-right">
             {stream && (
               <>

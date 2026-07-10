@@ -1742,13 +1742,7 @@ body {
 
 .list-header-top {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.list-header-top .list-header-title {
-  flex: 1;
-  min-width: 0;
+  align-items: center;
 }
 
 /* クエリは全文表示(条件セットごとに1行、折り返し可) */
