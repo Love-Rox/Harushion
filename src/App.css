@@ -1740,14 +1740,29 @@ body {
   line-height: 1.3;
 }
 
-.list-header-body {
+.list-header-top {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.list-header-top .list-header-title {
+  flex: 1;
   min-width: 0;
 }
 
-.list-header-body .query {
-  flex-shrink: 1;
-  min-width: 0;
+/* クエリは全文表示(条件セットごとに1行、折り返し可) */
+.list-header-query {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.query-line {
+  display: block;
+  overflow-wrap: anywhere;
 }
