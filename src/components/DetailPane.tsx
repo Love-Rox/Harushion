@@ -452,6 +452,29 @@ export function DetailPane({
 
   const actionBar = renderActionBar();
 
+  // URL コピー/アプリで開く/ブラウザで開く。通常ヘッダーとスティッキーバーの両方に出す
+  const urlActions = (
+    <>
+      <button
+        className="btn btn-small"
+        onClick={() => {
+          void onCopyUrl(detail.url).then(() => {
+            setUrlCopied(true);
+            setTimeout(() => setUrlCopied(false), 1500);
+          });
+        }}
+      >
+        {urlCopied ? t("detail.copied") : t("detail.copyUrl")}
+      </button>
+      <button className="btn btn-small" onClick={() => onOpenInApp(detail.url)}>
+        {t("detail.openInApp")}
+      </button>
+      <button className="btn btn-small" onClick={() => onOpenUrl(detail.url)}>
+        {t("detail.openInBrowser")}
+      </button>
+    </>
+  );
+
   return (
     <div className="detail-pane">
       <div className="detail-scroll" ref={scrollRef} onScroll={handleScroll}>
@@ -460,23 +483,7 @@ export function DetailPane({
             <span className="detail-repo">{detail.repo}</span>
             <span className="detail-number">#{detail.number}</span>
             <span className="detail-eyebrow-spacer" />
-            <button
-              className="btn btn-small"
-              onClick={() => {
-                void onCopyUrl(detail.url).then(() => {
-                  setUrlCopied(true);
-                  setTimeout(() => setUrlCopied(false), 1500);
-                });
-              }}
-            >
-              {urlCopied ? t("detail.copied") : t("detail.copyUrl")}
-            </button>
-            <button className="btn btn-small" onClick={() => onOpenInApp(detail.url)}>
-              {t("detail.openInApp")}
-            </button>
-            <button className="btn btn-small" onClick={() => onOpenUrl(detail.url)}>
-              {t("detail.openInBrowser")}
-            </button>
+            {urlActions}
           </div>
           <button className="detail-title-link" onClick={() => onOpenUrl(detail.url)}>
             {detail.title}
@@ -516,6 +523,7 @@ export function DetailPane({
                   {detail.repo}#{detail.number}
                 </span>
                 <span className="detail-sticky-title-text">{detail.title}</span>
+                <span className="detail-sticky-actions">{urlActions}</span>
               </div>
             )}
             {propsGone && (

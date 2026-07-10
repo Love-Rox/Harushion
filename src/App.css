@@ -609,6 +609,14 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-sticky-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .detail-sticky-repo {
