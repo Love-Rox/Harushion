@@ -102,25 +102,31 @@ export function EpicView({
             )}
             {epic.name}
           </h1>
-          <div className="epic-progress">
-            <div className="epic-progress-bar">
-              <div
-                className="epic-progress-fill"
+          <div
+            className="epic-progress"
+            title={`${epic.doneCount}/${epic.itemCount} (${Math.round(progressPct)}%)`}
+          >
+            <svg className="epic-donut" viewBox="0 0 36 36" aria-hidden="true">
+              <circle className="epic-donut-track" cx="18" cy="18" r="15.5" />
+              <circle
+                className="epic-donut-fill"
+                cx="18"
+                cy="18"
+                r="15.5"
+                transform="rotate(-90 18 18)"
                 style={{
-                  width: `${progressPct}%`,
-                  backgroundColor: epic.color ? `#${epic.color}` : "var(--accent)",
+                  stroke: epic.color ? `#${epic.color}` : "var(--accent)",
+                  strokeDasharray: `${(progressPct / 100) * 97.39} 97.39`,
                 }}
               />
-            </div>
+            </svg>
             <span className="epic-progress-text">
               {epic.doneCount}/{epic.itemCount}
             </span>
           </div>
         </div>
+        {epic.note && <p className="epic-note fg-muted">{epic.note}</p>}
         <div className="epic-header-body">
-          <div className="header-title">
-            {epic.note && <p className="epic-note fg-muted">{epic.note}</p>}
-          </div>
           <div className="header-right">
             <button className="btn" onClick={onRefresh} disabled={refreshing}>
               {refreshing ? t("common.updating") : t("common.refresh")}

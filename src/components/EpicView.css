@@ -206,3 +206,29 @@
   flex-shrink: 0;
   margin-left: auto;
 }
+
+/* 進捗ドーナツリング */
+.epic-donut {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.epic-donut-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 4;
+}
+
+.epic-donut-fill {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.25s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .epic-donut-fill {
+    transition: none;
+  }
+}

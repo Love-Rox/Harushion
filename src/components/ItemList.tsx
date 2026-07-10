@@ -173,22 +173,6 @@ export function ItemList({
                   <span className="item-main">
                     <span className="item-title">{item.title}</span>
                     <span className="item-meta">
-                      {item.epicIds.length > 0 && (
-                        <span className="item-epic-chips">
-                          {item.epicIds.map((id) => {
-                            const epic = epics.find((e) => e.id === id);
-                            if (!epic) return null;
-                            return (
-                              <span
-                                key={id}
-                                className="stream-color-chip item-epic-chip"
-                                style={{ backgroundColor: `#${epic.color ?? "8b98a5"}` }}
-                                title={epic.name}
-                              />
-                            );
-                          })}
-                        </span>
-                      )}
                       {assignedToMe && (
                         <span className="assigned-badge">{t("list.assignedYou")}</span>
                       )}
@@ -198,6 +182,27 @@ export function ItemList({
                       {relativeTime(item.updatedAt)}
                       {item.comments > 0 && <> · 💬{item.comments}</>}
                     </span>
+                    {item.epicIds.length > 0 && (
+                      <span className="item-epic-tags">
+                        {item.epicIds.map((id) => {
+                          const epic = epics.find((e) => e.id === id);
+                          if (!epic) return null;
+                          const color = epic.color ? `#${epic.color}` : "var(--fg-muted)";
+                          return (
+                            <span
+                              key={id}
+                              className="item-epic-tag"
+                              style={{
+                                color,
+                                borderColor: `color-mix(in srgb, ${color} 50%, transparent)`,
+                              }}
+                            >
+                              {epic.name}
+                            </span>
+                          );
+                        })}
+                      </span>
+                    )}
                   </span>
                 </button>
                 <button

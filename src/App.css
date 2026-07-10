@@ -1705,3 +1705,24 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* リスト行のエピック所属チップ(3行目) */
+.item-epic-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.item-epic-tag {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  padding: 0 7px;
+  border-radius: 8px;
+  border: 1px solid;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
