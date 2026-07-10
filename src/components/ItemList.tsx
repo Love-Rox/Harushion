@@ -97,32 +97,32 @@ export function ItemList({
 
   return (
     <div className="main">
-      <header className="header">
-        <div className="header-title">
-          <h1 className="app-title">{stream ? stream.name : "Harushion"}</h1>
+      <header className="header list-header">
+        <h1 className="app-title list-header-title">{stream ? stream.name : "Harushion"}</h1>
+        <div className="list-header-body">
           {stream && <code className="query">{stream.query.replace(/\n/g, " | ")}</code>}
-        </div>
-        <div className="header-right">
-          {stream && (
-            <>
-              <label className="unread-toggle">
-                <input type="checkbox" checked={unreadOnly} onChange={onToggleUnreadOnly} />
-                {t("list.unreadOnly")}
-              </label>
-              <button className="btn" onClick={onMarkAllRead}>
-                {t("list.markAllRead")}
-              </button>
-              <button className="btn btn-primary" onClick={onPollNow} disabled={polling}>
-                {polling ? t("common.updating") : t("common.refresh")}
-              </button>
-            </>
-          )}
-          {viewer && (
-            <span className="viewer">
-              <img src={viewer.avatarUrl} alt="" className="avatar" />
-              {viewer.login}
-            </span>
-          )}
+          <div className="header-right">
+            {stream && (
+              <>
+                <label className="unread-toggle">
+                  <input type="checkbox" checked={unreadOnly} onChange={onToggleUnreadOnly} />
+                  {t("list.unreadOnly")}
+                </label>
+                <button className="btn" onClick={onMarkAllRead}>
+                  {t("list.markAllRead")}
+                </button>
+                <button className="btn btn-primary" onClick={onPollNow} disabled={polling}>
+                  {polling ? t("common.updating") : t("common.refresh")}
+                </button>
+              </>
+            )}
+            {viewer && (
+              <span className="viewer">
+                <img src={viewer.avatarUrl} alt="" className="avatar" />
+                {viewer.login}
+              </span>
+            )}
+          </div>
         </div>
       </header>
 

@@ -1726,3 +1726,28 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Streamリストヘッダー: タイトル独立行(長い名前でも崩れない) */
+.list-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.list-header-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.list-header-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.list-header-body .query {
+  flex-shrink: 1;
+  min-width: 0;
+}
