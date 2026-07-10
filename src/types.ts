@@ -44,6 +44,7 @@ export type Item = {
   milestone: string | null;
   comments: number;
   assignees: string[];
+  relatedCount: number; // Development リンク + 相互参照メンションの概数(本文言及は含まない)
   epicIds: number[];
   isRead: boolean;
 };

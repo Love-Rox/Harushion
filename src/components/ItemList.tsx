@@ -226,6 +226,7 @@ export function ItemList({
                       {" · "}
                       {relativeTime(item.updatedAt)}
                       {item.comments > 0 && <> · 💬{item.comments}</>}
+                      {item.relatedCount > 0 && <> · 🔗{item.relatedCount}</>}
                     </span>
                     {item.epicIds.length > 0 && (
                       <span className="item-epic-tags">

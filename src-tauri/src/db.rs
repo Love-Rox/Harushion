@@ -39,6 +39,7 @@ pub struct StoredItem {
     pub comments: i64,
     pub milestone: Option<String>,
     pub assignees: Vec<String>,
+    pub related_count: i64,
     pub epic_ids: Vec<i64>,
     pub is_read: bool,
 }
@@ -106,7 +107,8 @@ CREATE TABLE IF NOT EXISTS items (
   repo TEXT NOT NULL,
   comments INTEGER NOT NULL DEFAULT 0,
   milestone TEXT,
-  assignees TEXT NOT NULL DEFAULT ''
+  assignees TEXT NOT NULL DEFAULT '',
+  related_count INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS stream_items (
@@ -249,6 +251,10 @@ impl Db {
         let _ = conn.execute("ALTER TABLE items ADD COLUMN milestone TEXT", []);
         let _ = conn.execute("ALTER TABLE items ADD COLUMN assignees TEXT NOT NULL DEFAULT ''", []);
         let _ = conn.execute("ALTER TABLE epics ADD COLUMN archived INTEGER NOT NULL DEFAULT 0", []);
+        let _ = conn.execute(
+            "ALTER TABLE items ADD COLUMN related_count INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
 
         // 初回起動時のシード Stream
         let count: i64 = conn
@@ -363,7 +369,7 @@ impl Db {
         let sql = format!(
             "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
                     i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees,
-                    (SELECT GROUP_CONCAT(ei.epic_id) FROM epic_items ei WHERE ei.item_url = i.url), {IS_READ_EXPR}
+                    (SELECT GROUP_CONCAT(ei.epic_id) FROM epic_items ei WHERE ei.item_url = i.url), {IS_READ_EXPR}, i.related_count
              FROM items i
              JOIN stream_items si ON si.item_url = i.url
              LEFT JOIN read_state r ON r.item_url = i.url
@@ -388,6 +394,7 @@ impl Db {
                     comments: row.get(10)?,
                     milestone: row.get(11)?,
                     assignees: split_assignees(row.get::<_, String>(12)?),
+                    related_count: row.get(15)?,
                     epic_ids: split_epic_ids(row.get::<_, Option<String>>(13)?),
                     is_read: row.get(14)?,
                 })
@@ -419,15 +426,16 @@ impl Db {
 
             tx.execute(
                 "INSERT INTO items (url, kind, number, title, state, is_draft, updated_at,
-                                    author, author_avatar, repo, comments, milestone, assignees)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                                    author, author_avatar, repo, comments, milestone, assignees,
+                                    related_count)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                  ON CONFLICT(url) DO UPDATE SET
                    kind = excluded.kind, number = excluded.number, title = excluded.title,
                    state = excluded.state, is_draft = excluded.is_draft,
                    updated_at = excluded.updated_at, author = excluded.author,
                    author_avatar = excluded.author_avatar, repo = excluded.repo,
                    comments = excluded.comments, milestone = excluded.milestone,
-                   assignees = excluded.assignees",
+                   assignees = excluded.assignees, related_count = excluded.related_count",
                 params![
                     item.url,
                     item.kind,
@@ -441,7 +449,8 @@ impl Db {
                     item.repo,
                     item.comments,
                     item.milestone,
-                    item.assignees.join(",")
+                    item.assignees.join(","),
+                    item.related_count
                 ],
             )
             .map_err(db_err)?;
@@ -791,7 +800,7 @@ impl Db {
             "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
                     i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees,
                     (SELECT GROUP_CONCAT(ei.epic_id) FROM epic_items ei WHERE ei.item_url = i.url), {IS_READ_EXPR},
-                    ei.position
+                    ei.position, i.related_count
              FROM epic_items ei
              JOIN items i ON i.url = ei.item_url
              LEFT JOIN read_state r ON r.item_url = i.url
@@ -816,6 +825,7 @@ impl Db {
                         comments: row.get(10)?,
                         milestone: row.get(11)?,
                         assignees: split_assignees(row.get::<_, String>(12)?),
+                        related_count: row.get(16)?,
                         epic_ids: split_epic_ids(row.get::<_, Option<String>>(13)?),
                         is_read: row.get(14)?,
                     },
@@ -1069,6 +1079,7 @@ mod tests {
             comments: 0,
             milestone: None,
             assignees: Vec::new(),
+            related_count: 0,
         }
     }
 
@@ -1078,6 +1089,16 @@ mod tests {
         let streams = db.list_streams().unwrap();
         assert_eq!(streams.len(), 1);
         assert_eq!(streams[0].query, "involves:@me sort:updated-desc");
+    }
+
+    #[test]
+    fn persists_related_count_through_upsert_and_list() {
+        let db = test_db();
+        let sid = db.create_stream("s", "is:open", None, 60, None).unwrap();
+        let mut it = item("https://github.com/o/r/issues/9", "2026-07-09T00:00:00Z");
+        it.related_count = 3;
+        db.upsert_items(sid, &[it]).unwrap();
+        assert_eq!(db.list_items(sid, false).unwrap()[0].related_count, 3);
     }
 
     #[test]
@@ -1233,6 +1254,7 @@ mod tests {
             comments: 0,
             milestone: None,
             assignees: Vec::new(),
+            related_count: 0,
         }
     }
 
@@ -1367,6 +1389,7 @@ mod tests {
             comments: 0,
             milestone: milestone.map(String::from),
             assignees: Vec::new(),
+            related_count: 0,
         }
     }
 

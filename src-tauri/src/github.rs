@@ -147,6 +147,7 @@ pub struct Item {
     pub comments: i64,
     pub milestone: Option<String>,
     pub assignees: Vec<String>,
+    pub related_count: i64,
 }
 
 pub async fn fetch_viewer(state: &AppState) -> Result<Viewer, String> {
@@ -172,6 +173,8 @@ query($q: String!, $first: Int!, $after: String) {
         comments { totalCount }
         milestone { title }
         assignees(first: 10) { nodes { login } }
+        timelineItems(itemTypes: [CROSS_REFERENCED_EVENT]) { totalCount }
+        closedByPullRequestsReferences { totalCount }
       }
       ... on PullRequest {
         number title url state isDraft updatedAt
@@ -180,6 +183,8 @@ query($q: String!, $first: Int!, $after: String) {
         comments { totalCount }
         milestone { title }
         assignees(first: 10) { nodes { login } }
+        timelineItems(itemTypes: [CROSS_REFERENCED_EVENT]) { totalCount }
+        closingIssuesReferences { totalCount }
       }
     }
   }
@@ -236,6 +241,9 @@ pub async fn search_items(state: &AppState, query: &str, max_total: u32) -> Resu
                     .as_array()
                     .map(|ns| ns.iter().filter_map(|n| n["login"].as_str().map(String::from)).collect())
                     .unwrap_or_default(),
+                related_count: node["timelineItems"]["totalCount"].as_i64().unwrap_or(0)
+                    + node["closedByPullRequestsReferences"]["totalCount"].as_i64().unwrap_or(0)
+                    + node["closingIssuesReferences"]["totalCount"].as_i64().unwrap_or(0),
             })
         }));
 

@@ -337,6 +337,7 @@ function App() {
       milestone: null,
       comments: 0,
       assignees: [],
+      relatedCount: 0,
       epicIds: [],
       isRead: true,
     });
