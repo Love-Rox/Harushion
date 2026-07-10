@@ -12,6 +12,7 @@ import type {
   ItemAction,
   ItemDetail,
   LabelInfo,
+  RelatedItem,
   Stream,
   UpdateInfo,
   Viewer,
@@ -312,6 +313,38 @@ function App() {
       setError(String(e));
     }
     await loadStreams();
+  };
+
+  // 詳細ペインの関連リンク(Issue⇔PR)クリック。リスト内なら通常の選択フロー、
+  // リスト外なら操作対象(selectedItem)ごと差し替えて詳細だけ読み込む(既読処理はしない)
+  const handleSelectRelated = (related: RelatedItem) => {
+    const listItem = items.find((i) => i.url === related.url);
+    if (listItem) {
+      void handleSelectItem(listItem);
+      return;
+    }
+    setSelectedItem({
+      kind: related.kind,
+      number: related.number,
+      title: related.title,
+      url: related.url,
+      state: related.state,
+      isDraft: related.isDraft,
+      updatedAt: "",
+      author: null,
+      authorAvatar: null,
+      repo: related.repo,
+      milestone: null,
+      comments: 0,
+      assignees: [],
+      epicIds: [],
+      isRead: true,
+    });
+    setItemDetail(null);
+    setDetailError(null);
+    setItemEpicIds([]);
+    void loadDetail(related.url);
+    void loadItemEpicIds(related.url);
   };
 
   const handleOpenInBrowser = (item: Item) => {
@@ -655,6 +688,7 @@ function App() {
     onOpenUrl: handleOpenUrl,
     onOpenInApp: handleOpenInApp,
     onCopyUrl: handleCopyUrl,
+    onSelectRelated: handleSelectRelated,
     loadRepoLabels,
   };
 

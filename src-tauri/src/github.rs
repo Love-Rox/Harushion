@@ -327,6 +327,18 @@ pub struct ReviewInfo {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RelatedItem {
+    pub kind: String,
+    pub number: i64,
+    pub title: String,
+    pub url: String,
+    pub state: String,
+    pub is_draft: bool,
+    pub repo: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ItemDetail {
     pub kind: String,
     pub number: i64,
@@ -354,6 +366,8 @@ pub struct ItemDetail {
     pub reviews: Vec<ReviewInfo>,
     pub comments: Vec<CommentInfo>,
     pub comments_total: i64,
+    pub related: Vec<RelatedItem>,
+    pub related_total: i64,
 }
 
 const DETAIL_QUERY: &str = r#"
@@ -367,6 +381,10 @@ query($url: URI!) {
       labels(first: 30) { nodes { name color } }
       assignees(first: 15) { nodes { login } }
       milestone { title }
+      closedByPullRequestsReferences(first: 10, includeClosedPrs: true) {
+        totalCount
+        nodes { number title url state isDraft repository { nameWithOwner } }
+      }
       comments(last: 30) {
         totalCount
         nodes { author { login avatarUrl } bodyHTML createdAt }
@@ -381,6 +399,10 @@ query($url: URI!) {
       milestone { title }
       baseRefName headRefName additions deletions changedFiles
       mergeable reviewDecision
+      closingIssuesReferences(first: 10) {
+        totalCount
+        nodes { number title url state repository { nameWithOwner } }
+      }
       latestReviews(first: 15) { nodes { author { login } state } }
       commits(last: 1) {
         nodes {
@@ -456,6 +478,40 @@ fn parse_checks(node: &Value) -> Vec<CheckInfo> {
         .unwrap_or_default()
 }
 
+/// Development リンク(Issue⇔PR)。Issue 側は「この Issue を閉じる PR」、
+/// PR 側は「この PR が閉じる Issue」で、向きによってフィールド名と相手の kind が変わる
+fn parse_related(node: &Value, kind: &str) -> (Vec<RelatedItem>, i64) {
+    let (key, related_kind) = if kind == "issue" {
+        ("closedByPullRequestsReferences", "pr")
+    } else {
+        ("closingIssuesReferences", "issue")
+    };
+    let total = node[key]["totalCount"].as_i64().unwrap_or(0);
+    let related = node[key]["nodes"]
+        .as_array()
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|n| {
+                    Some(RelatedItem {
+                        kind: related_kind.to_string(),
+                        number: n["number"].as_i64()?,
+                        title: n["title"].as_str()?.to_string(),
+                        url: n["url"].as_str()?.to_string(),
+                        state: n["state"].as_str().unwrap_or_default().to_string(),
+                        is_draft: n["isDraft"].as_bool().unwrap_or(false),
+                        repo: n["repository"]["nameWithOwner"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    (related, total)
+}
+
 pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail, String> {
     let data = state.graphql(DETAIL_QUERY, json!({ "url": url })).await?;
     let node = &data["resource"];
@@ -506,6 +562,7 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
         .unwrap_or_default();
 
     let (comments, comments_total) = parse_comments(node);
+    let (related, related_total) = parse_related(node, kind);
 
     Ok(ItemDetail {
         kind: kind.to_string(),
@@ -537,6 +594,8 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
         reviews,
         comments,
         comments_total,
+        related,
+        related_total,
     })
 }
 
@@ -604,6 +663,30 @@ mod tests {
         assert!(!detail.body_html.is_empty());
         assert!(detail.comments_total > 0);
         assert!(!detail.comments.is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore = "requires gh auth and network"]
+    async fn fetches_related_links_between_issue_and_pr() {
+        let state = AppState::new();
+        // Development リンクを持つ既知のペア(マージ済み PR とそれが閉じた Issue)
+        let pr = fetch_item_detail(&state, "https://github.com/tauri-apps/tauri/pull/15677")
+            .await
+            .expect("pr detail fetch failed");
+        assert!(
+            pr.related.iter().any(|r| r.kind == "issue" && r.number == 15672),
+            "PR 側に閉じた Issue が出るはず: {:?}",
+            pr.related.iter().map(|r| r.number).collect::<Vec<_>>()
+        );
+        let issue = fetch_item_detail(&state, "https://github.com/tauri-apps/tauri/issues/15672")
+            .await
+            .expect("issue detail fetch failed");
+        assert!(
+            issue.related.iter().any(|r| r.kind == "pr" && r.number == 15677),
+            "Issue 側に閉じる PR が出るはず: {:?}",
+            issue.related.iter().map(|r| r.number).collect::<Vec<_>>()
+        );
+        assert!(issue.related_total >= 1);
     }
 
     #[tokio::test]

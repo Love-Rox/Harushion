@@ -64,6 +64,17 @@ export type CheckInfo = { name: string; status: string; url: string | null };
 // state: APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED | PENDING
 export type ReviewInfo = { author: string | null; state: string };
 
+// Development リンク(Issue⇔PR)。Issue 詳細では関連 PR、PR 詳細では関連 Issue が入る
+export type RelatedItem = {
+  kind: "issue" | "pr";
+  number: number;
+  title: string;
+  url: string;
+  state: string; // OPEN | CLOSED | MERGED
+  isDraft: boolean;
+  repo: string; // "owner/name"
+};
+
 export type ItemDetail = {
   kind: "issue" | "pr";
   number: number;
@@ -92,6 +103,8 @@ export type ItemDetail = {
   reviews: ReviewInfo[]; // latest review per reviewer
   comments: CommentInfo[]; // last 30, chronological
   commentsTotal: number;
+  related: RelatedItem[]; // first 10 Development links
+  relatedTotal: number;
 };
 
 export type MergeMethod = "merge" | "squash" | "rebase";

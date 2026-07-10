@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, UIEvent as ReactUIEvent } from "react";
-import type { Epic, Item, ItemAction, ItemDetail, LabelInfo, MergeMethod, Viewer } from "../types";
+import type {
+  Epic,
+  Item,
+  ItemAction,
+  ItemDetail,
+  LabelInfo,
+  MergeMethod,
+  RelatedItem,
+  Viewer,
+} from "../types";
 import { relativeTime } from "./format";
 import { StateBadge } from "./StateBadge";
 import { useI18n } from "../i18n";
@@ -23,6 +32,7 @@ type Props = {
   onOpenUrl: (url: string) => void;
   onOpenInApp: (url: string) => void;
   onCopyUrl: (url: string) => Promise<void>;
+  onSelectRelated: (related: RelatedItem) => void;
   loadRepoLabels: (repo: string) => Promise<LabelInfo[]>;
 };
 
@@ -99,6 +109,7 @@ export function DetailPane({
   onOpenUrl,
   onOpenInApp,
   onCopyUrl,
+  onSelectRelated,
   loadRepoLabels,
 }: Props) {
   const { t } = useI18n();
@@ -737,6 +748,31 @@ export function DetailPane({
               )}
             </div>
           </div>
+
+          {detail.related.length > 0 && (
+            <div className="prop-row">
+              <span className="prop-label">{t("detail.related")}</span>
+              <div className="prop-value related-list">
+                {detail.related.map((r) => (
+                  <button
+                    key={r.url}
+                    className="related-item"
+                    title={r.url}
+                    onClick={() => onSelectRelated(r)}
+                  >
+                    <StateBadge kind={r.kind} state={r.state} isDraft={r.isDraft} size={14} />
+                    <span className="related-ref">
+                      {r.repo !== detail.repo && r.repo}#{r.number}
+                    </span>
+                    <span className="related-title">{r.title}</span>
+                  </button>
+                ))}
+                {detail.relatedTotal > detail.related.length && (
+                  <span className="fg-muted">+{detail.relatedTotal - detail.related.length}</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {detail.kind === "pr" && detail.checks.length > 0 && (
             <div className="prop-row">

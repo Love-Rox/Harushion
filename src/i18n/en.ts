@@ -86,6 +86,7 @@ export const en: Messages = {
     checks: "Checks",
     reviews: "Reviews",
     epics: "Epics",
+    related: "Linked",
     addToEpic: "+ Add…",
     removeFromEpic: "Remove {name} from epic",
     noEpicsHint: "Create an epic from the sidebar",

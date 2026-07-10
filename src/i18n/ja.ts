@@ -85,6 +85,7 @@ export const ja = {
     checks: "チェック",
     reviews: "レビュー",
     epics: "エピック",
+    related: "関連",
     addToEpic: "+ 追加…",
     removeFromEpic: "{name} をエピックから削除",
     noEpicsHint: "サイドバーからエピックを作成",
