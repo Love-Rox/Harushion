@@ -1,8 +1,8 @@
 {
   "name": "harushion",
   "version": "0.1.1",
-  "license": "MIT",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vp dev",

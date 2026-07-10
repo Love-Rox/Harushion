@@ -670,7 +670,10 @@ function App() {
             {updateInfo.method === "brew" && (
               <>
                 {t("banner.brewInstructionPrefix")}
-                <code>brew upgrade --cask harushion</code>
+                <code>
+                  brew upgrade --cask harushion && xattr -rd com.apple.quarantine
+                  /Applications/Harushion.app
+                </code>
                 {t("banner.brewInstructionSuffix")}
               </>
             )}
