@@ -67,7 +67,6 @@ export const ja = {
     markRead: "既読にする",
     markUnread: "未読にする",
     copyUrl: "URLをコピー",
-    openInBrowser: "{url} をブラウザで開く",
   },
   detail: {
     selectItem: "アイテムを選択してください",

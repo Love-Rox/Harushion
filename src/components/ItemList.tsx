@@ -1,3 +1,4 @@
+import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { useEffect, useRef, useState } from "react";
 import type { Epic, Item, Stream, Viewer } from "../types";
 import { relativeTime } from "./format";
@@ -50,32 +51,47 @@ export function ItemList({
 }: Props) {
   const { t } = useI18n();
   const [renderCount, setRenderCount] = useState(RENDER_PAGE);
-  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [queryOpen, setQueryOpen] = useState(
     () => localStorage.getItem("harushion.queryOpen") === "true",
   );
-  const [epicPopoverUrl, setEpicPopoverUrl] = useState<string | null>(null);
-  const popoverRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!epicPopoverUrl) return;
-    const handlePointerDown = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setEpicPopoverUrl(null);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setEpicPopoverUrl(null);
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [epicPopoverUrl]);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
+
+  /** 行の右クリックで OS ネイティブメニューを表示する(エピック所属・既読切替・コピー・ブラウザ) */
+  const showItemContextMenu = async (item: Item) => {
+    const epicItems =
+      epics.length > 0
+        ? await Promise.all(
+            epics.map((epic) => {
+              const isMember = item.epicIds.includes(epic.id);
+              return CheckMenuItem.new({
+                text: epic.name,
+                checked: isMember,
+                action: () => void onToggleEpicMembership(epic.id, item.url, isMember),
+              });
+            }),
+          )
+        : [await MenuItem.new({ text: t("detail.noEpicsHint"), enabled: false })];
+    const menu = await Menu.new({
+      items: [
+        await Submenu.new({ text: t("list.addToEpic"), items: epicItems }),
+        await MenuItem.new({
+          text: item.isRead ? t("list.markUnread") : t("list.markRead"),
+          action: () => onToggleRead(item),
+        }),
+        await PredefinedMenuItem.new({ item: "Separator" }),
+        await MenuItem.new({
+          text: t("list.copyUrl"),
+          action: () => void onCopyUrl(item.url),
+        }),
+        await MenuItem.new({
+          text: t("detail.openInBrowser"),
+          action: () => onItemOpenInBrowser(item),
+        }),
+      ],
+    });
+    await menu.popup();
+  };
 
   // Stream やフィルタが変わったら先頭ページに戻す
   useEffect(() => {
@@ -179,6 +195,10 @@ export function ItemList({
               <div
                 key={item.url}
                 className={`item ${item.isRead ? "read" : "unread"}${selected ? " selected" : ""}${assignedToMe ? " assigned" : ""}`}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  void showItemContextMenu(item);
+                }}
               >
                 <button
                   className="read-toggle"
@@ -229,68 +249,6 @@ export function ItemList({
                       </span>
                     )}
                   </span>
-                </button>
-                <button
-                  className="item-open-browser"
-                  title={t("list.addToEpic")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEpicPopoverUrl((prev) => (prev === item.url ? null : item.url));
-                  }}
-                >
-                  ⊕
-                </button>
-                {epicPopoverUrl === item.url && (
-                  <div className="popover item-epic-popover" ref={popoverRef}>
-                    {epics.length === 0 && (
-                      <p className="popover-empty">{t("detail.noEpicsHint")}</p>
-                    )}
-                    {epics.map((epic) => {
-                      const isMember = item.epicIds.includes(epic.id);
-                      return (
-                        <button
-                          key={epic.id}
-                          className="item-epic-popover-row"
-                          onClick={() => void onToggleEpicMembership(epic.id, item.url, isMember)}
-                        >
-                          <span className="item-epic-popover-check">{isMember ? "✓" : ""}</span>
-                          {epic.color && (
-                            <span
-                              className="stream-color-chip"
-                              style={{ backgroundColor: `#${epic.color}` }}
-                            />
-                          )}
-                          <span className="item-epic-popover-name">{epic.name}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                <button
-                  className="item-open-browser"
-                  title={t("list.copyUrl")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void onCopyUrl(item.url).then(() => {
-                      setCopiedUrl(item.url);
-                      setTimeout(
-                        () => setCopiedUrl((prev) => (prev === item.url ? null : prev)),
-                        1500,
-                      );
-                    });
-                  }}
-                >
-                  {copiedUrl === item.url ? "✓" : "⧉"}
-                </button>
-                <button
-                  className="item-open-browser"
-                  title={t("list.openInBrowser", { url: item.url })}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onItemOpenInBrowser(item);
-                  }}
-                >
-                  ↗
                 </button>
               </div>
             );

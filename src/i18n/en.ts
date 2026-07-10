@@ -68,7 +68,6 @@ export const en: Messages = {
     markRead: "Mark as read",
     markUnread: "Mark as unread",
     copyUrl: "Copy URL",
-    openInBrowser: "Open {url} in browser",
   },
   detail: {
     selectItem: "Select an item",

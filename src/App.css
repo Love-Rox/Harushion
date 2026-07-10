@@ -411,28 +411,6 @@ body {
   flex: 1;
 }
 
-.item-open-browser {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  background: none;
-  border: none;
-  color: var(--fg-muted);
-  cursor: pointer;
-  font-size: 13px;
-  opacity: 0;
-}
-
-.item:hover .item-open-browser {
-  opacity: 1;
-}
-
-.item-open-browser:hover {
-  color: var(--accent);
-}
-
 .item-title {
   font-weight: 600;
   white-space: nowrap;
@@ -1654,48 +1632,6 @@ body {
   height: 8px;
   border-radius: 2px;
   display: inline-block;
-}
-
-.item-epic-popover {
-  right: 40px;
-  top: 70%;
-  min-width: 180px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.item-epic-popover-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 5px 8px;
-  background: none;
-  border: none;
-  color: var(--fg);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12.5px;
-  text-align: left;
-  border-radius: 4px;
-}
-
-.item-epic-popover-row:hover {
-  background: var(--bg);
-}
-
-.item-epic-popover-check {
-  width: 14px;
-  flex-shrink: 0;
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.item-epic-popover-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* リスト行のエピック所属チップ(3行目) */
