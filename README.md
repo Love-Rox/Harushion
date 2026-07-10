@@ -16,11 +16,12 @@ GitHub の Issue/PR を Stream(検索クエリ)単位でウォッチするデス
 
 ```sh
 brew tap love-rox/tap
-HOMEBREW_CASK_OPTS=--no-quarantine brew install --cask harushion
+brew install --cask harushion
+xattr -rd com.apple.quarantine /Applications/Harushion.app
 ```
 
-無署名配布のため `--no-quarantine` を推奨します(付けない場合は初回起動時に右クリック → 開く)。
-Homebrew 6 以降は `--no-quarantine` を CLI フラグとして受け付けないため、上記のように `HOMEBREW_CASK_OPTS` 環境変数で指定します(旧バージョンでも有効)。
+無署名配布のため、インストール後に `xattr` で Gatekeeper の隔離属性を外します(外さない場合は、初回起動がブロックされたら システム設定 → プライバシーとセキュリティ → 「このまま開く」)。
+Homebrew 6 はダウンロードをサンドボックスで実行するため、従来の `--no-quarantine` 指定では隔離を回避できません。
 更新は `brew upgrade --cask harushion`。新しいバージョンが出るとアプリ内バナーでも通知されます。
 
 ## インストール (Windows / Linux)
@@ -68,4 +69,5 @@ cd src-tauri && cargo test -- --ignored
 | M2       | 詳細ペインと GitHub 操作(gh でできることを網羅) | ✅   |
 | M3       | アプリ内ブラウザ統合(WebviewWindow 方式)        | ✅   |
 | M4       | ブランチグラフ                                  | ✅   |
-| M5       | 配布(mac 署名 → Windows/Linux)                  | 予定 |
+| M5       | 配布(Homebrew / Windows / Linux + 自動更新)     | ✅ v0.1.0 |
+| M6       | mac 署名・notarize(Apple Developer 加入後)      | 予定 |
