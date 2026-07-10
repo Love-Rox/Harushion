@@ -70,4 +70,4 @@ cd src-tauri && cargo test -- --ignored
 | M3       | アプリ内ブラウザ統合(WebviewWindow 方式)        | ✅   |
 | M4       | ブランチグラフ                                  | ✅   |
 | M5       | 配布(Homebrew / Windows / Linux + 自動更新)     | ✅ v0.1.0 |
-| M6       | mac 署名・notarize(Apple Developer 加入後)      | 予定 |
+| M6       | mac 署名・notarize                              | 保留 |
