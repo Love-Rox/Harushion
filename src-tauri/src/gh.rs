@@ -389,4 +389,22 @@ mod tests {
             serde_json::from_str(r#"{"type":"editLabels","add":["bug"],"remove":["wip"]}"#).unwrap();
         assert_eq!(a, ItemAction::EditLabels { add: vec!["bug".into()], remove: vec!["wip".into()] });
     }
+
+    /// Finder/Dock 起動(launchd の最小 PATH)を模擬し、fix_path_env::fix() 後に
+    /// gh が解決できることを検証する。gh が Homebrew 等の非標準 PATH にある
+    /// ローカル環境が前提のためオプトイン(CI では走らせない)。
+    /// PATH をプロセス全体で書き換えるので、他のテストと並走させないこと。
+    #[test]
+    #[ignore]
+    fn path_fix_resolves_gh_from_minimal_path() {
+        std::env::set_var("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
+        let before = std::process::Command::new("gh").arg("--version").output();
+        assert!(before.is_err(), "前提が不成立: 最小 PATH でも gh が見つかっています");
+        fix_path_env::fix().expect("fix_path_env::fix() が失敗");
+        let after = std::process::Command::new("gh").arg("--version").output();
+        assert!(
+            after.is_ok_and(|o| o.status.success()),
+            "fix() 後も gh が解決できません"
+        );
+    }
 }

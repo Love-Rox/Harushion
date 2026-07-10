@@ -1,6 +1,6 @@
 [package]
 name = "harushion"
-version = "0.1.0"
+version = "0.1.1"
 description = "GitHub issue/PR watcher built with Tauri"
 authors = ["sasagar"]
 edition = "2021"
@@ -28,6 +28,9 @@ rusqlite = { version = "0.40.1", features = ["bundled"] }
 tauri-plugin-notification = "2.3.3"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-clipboard-manager = "2.3.2"
+# GUI 起動(Finder/Dock)では launchd の最小 PATH しか渡らず gh が見つからないため、
+# ログインシェルから PATH を取り込む。crates.io 未公開のため rev 固定の git 依存
+fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs", rev = "c4c45d503ea115a839aae718d02f79e7c7f0f673" }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

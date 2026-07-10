@@ -289,6 +289,11 @@ async fn poll_stream_now(app: AppHandle, stream_id: i64) -> Result<usize, String
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Finder/Dock 起動では launchd の最小 PATH しか渡らず gh を見つけられないため、
+    // 先にログインシェルの PATH を取り込む(失敗しても起動は続行)
+    if let Err(e) = fix_path_env::fix() {
+        eprintln!("failed to import login shell PATH: {e}");
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
