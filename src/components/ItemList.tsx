@@ -51,6 +51,9 @@ export function ItemList({
   const { t } = useI18n();
   const [renderCount, setRenderCount] = useState(RENDER_PAGE);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [queryOpen, setQueryOpen] = useState(
+    () => localStorage.getItem("harushion.queryOpen") === "true",
+  );
   const [epicPopoverUrl, setEpicPopoverUrl] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
@@ -124,6 +127,26 @@ export function ItemList({
           </div>
         </div>
         {stream && (
+          <button
+            className="query-toggle"
+            onClick={() =>
+              setQueryOpen((v) => {
+                localStorage.setItem("harushion.queryOpen", String(!v));
+                return !v;
+              })
+            }
+          >
+            <span className={`folder-arrow${queryOpen ? "" : " collapsed"}`}>▾</span>
+            {t("list.queryLabel")}
+            {!queryOpen && (
+              <code className="query-summary">
+                {stream.query.split("\n")[0]}
+                {stream.query.includes("\n") && ` +${stream.query.split("\n").length - 1}`}
+              </code>
+            )}
+          </button>
+        )}
+        {stream && queryOpen && (
           <code className="query list-header-query">
             {stream.query.split("\n").map((line, i) => (
               <span key={i} className="query-line">

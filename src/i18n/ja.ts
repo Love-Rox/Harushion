@@ -60,6 +60,7 @@ export const ja = {
     markAllRead: "全て既読",
     assignedYou: "担当",
     addToEpic: "エピックへ追加",
+    queryLabel: "クエリ",
     noStream: "ストリームがありません",
     createStream: "+ Stream",
     emptyItems: "アイテムがありません",
