@@ -32,6 +32,7 @@ tauri-plugin-clipboard-manager = "2.3.2"
 # GUI 起動(Finder/Dock)では launchd の最小 PATH しか渡らず gh が見つからないため、
 # ログインシェルから PATH を取り込む。crates.io 未公開のため rev 固定の git 依存
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs", rev = "c4c45d503ea115a839aae718d02f79e7c7f0f673" }
+tauri-plugin-window-state = "2.4.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
