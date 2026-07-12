@@ -25,21 +25,6 @@
   gap: 8px;
 }
 
-.epic-progress-bar {
-  flex: 1;
-  max-width: 160px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--border);
-  overflow: hidden;
-}
-
-.epic-progress-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.2s ease;
-}
-
 .epic-progress-text {
   flex-shrink: 0;
   font-size: 11px;
