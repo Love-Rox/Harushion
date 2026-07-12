@@ -90,6 +90,8 @@ export const ja = {
     removeFromEpic: "{name} をエピックから削除",
     noEpicsHint: "サイドバーからエピックを作成",
     noBody: "本文なし",
+    commits: "コミット",
+    moreCommits: "他{n}件のコミット",
     comments: "コメント",
     moreComments: "他{n}件のコメント",
     commentPlaceholder: "コメントを書く…",

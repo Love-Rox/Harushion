@@ -65,6 +65,16 @@ export type CheckInfo = { name: string; status: string; url: string | null };
 // state: APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED | PENDING
 export type ReviewInfo = { author: string | null; state: string };
 
+// PR のコミット履歴の1件。author は GitHub ユーザーの login、紐付かなければ git の author 名
+export type CommitInfo = {
+  shortOid: string;
+  message: string; // headline only
+  author: string | null;
+  authorAvatar: string | null;
+  date: string; // ISO8601 (committedDate)
+  url: string; // commit page on github.com
+};
+
 // Development リンク(Issue⇔PR)。Issue 詳細では関連 PR、PR 詳細では関連 Issue が入る
 export type RelatedItem = {
   kind: "issue" | "pr";
@@ -102,6 +112,8 @@ export type ItemDetail = {
   reviewDecision: string | null; // APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED | null
   checks: CheckInfo[];
   reviews: ReviewInfo[]; // latest review per reviewer
+  commits: CommitInfo[]; // last 30, chronological
+  commitsTotal: number;
   comments: CommentInfo[]; // last 30, chronological
   commentsTotal: number;
   related: RelatedItem[]; // first 10 Development links

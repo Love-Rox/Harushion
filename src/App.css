@@ -1175,6 +1175,55 @@ body {
   padding: 14px 18px;
 }
 
+.commits-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.commit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.commit-row:hover .commit-message {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.commit-message {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-author {
+  color: var(--fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.commit-oid {
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+
+.commit-time {
+  color: var(--fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.avatar-placeholder {
+  display: inline-block;
+  background: var(--border);
+}
+
 .comments-section {
   display: flex;
   flex-direction: column;

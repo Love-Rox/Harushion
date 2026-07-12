@@ -91,6 +91,8 @@ export const en: Messages = {
     removeFromEpic: "Remove {name} from epic",
     noEpicsHint: "Create an epic from the sidebar",
     noBody: "No description",
+    commits: "Commits",
+    moreCommits: "{n} more commits",
     comments: "Comments",
     moreComments: "{n} more comments",
     commentPlaceholder: "Write a comment…",

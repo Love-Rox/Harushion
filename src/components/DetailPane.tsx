@@ -834,6 +834,35 @@ export function DetailPane({
           )}
         </section>
 
+        {detail.kind === "pr" && detail.commits.length > 0 && (
+          <section className="commits-section">
+            <h3 className="detail-section-title">
+              {t("detail.commits")}
+              {detail.commitsTotal > 0 && ` (${detail.commitsTotal})`}
+            </h3>
+            {detail.commitsTotal > detail.commits.length && (
+              <p className="comments-hint">
+                {t("detail.moreCommits", { n: detail.commitsTotal - detail.commits.length })}
+              </p>
+            )}
+            {detail.commits.map((c) => (
+              <div key={c.shortOid} className="commit-row" onClick={() => onOpenUrl(c.url)}>
+                {c.authorAvatar ? (
+                  <img src={c.authorAvatar} className="avatar avatar-small" alt="" />
+                ) : (
+                  <span className="avatar avatar-small avatar-placeholder" />
+                )}
+                <span className="commit-message" title={c.message}>
+                  {c.message}
+                </span>
+                <span className="commit-author">{c.author ?? "unknown"}</span>
+                <code className="commit-oid">{c.shortOid}</code>
+                <span className="commit-time">{relativeTime(c.date)}</span>
+              </div>
+            ))}
+          </section>
+        )}
+
         <section className="comments-section">
           <h3 className="detail-section-title">
             {t("detail.comments")}

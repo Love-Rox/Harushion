@@ -335,6 +335,17 @@ pub struct ReviewInfo {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CommitInfo {
+    pub short_oid: String,
+    pub message: String,
+    pub author: Option<String>,
+    pub author_avatar: Option<String>,
+    pub date: String,
+    pub url: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RelatedItem {
     pub kind: String,
     pub number: i64,
@@ -372,6 +383,8 @@ pub struct ItemDetail {
     pub review_decision: Option<String>,
     pub checks: Vec<CheckInfo>,
     pub reviews: Vec<ReviewInfo>,
+    pub commits: Vec<CommitInfo>,
+    pub commits_total: i64,
     pub comments: Vec<CommentInfo>,
     pub comments_total: i64,
     pub related: Vec<RelatedItem>,
@@ -434,6 +447,15 @@ query($url: URI!) {
         }
       }
       latestReviews(first: 15) { nodes { author { login } state } }
+      commitHistory: commits(last: 30) {
+        totalCount
+        nodes {
+          commit {
+            abbreviatedOid messageHeadline committedDate url
+            author { name avatarUrl user { login } }
+          }
+        }
+      }
       commits(last: 1) {
         nodes {
           commit {
@@ -477,6 +499,33 @@ fn parse_comments(node: &Value) -> (Vec<CommentInfo>, i64) {
         })
         .unwrap_or_default();
     (comments, total)
+}
+
+fn parse_commit_history(node: &Value) -> (Vec<CommitInfo>, i64) {
+    let total = node["commitHistory"]["totalCount"].as_i64().unwrap_or(0);
+    let commits = node["commitHistory"]["nodes"]
+        .as_array()
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|n| {
+                    let c = &n["commit"];
+                    Some(CommitInfo {
+                        short_oid: c["abbreviatedOid"].as_str()?.to_string(),
+                        message: c["messageHeadline"].as_str().unwrap_or_default().to_string(),
+                        author: c["author"]["user"]["login"]
+                            .as_str()
+                            .or(c["author"]["name"].as_str())
+                            .map(String::from),
+                        author_avatar: c["author"]["avatarUrl"].as_str().map(String::from),
+                        date: c["committedDate"].as_str().unwrap_or_default().to_string(),
+                        url: c["url"].as_str().unwrap_or_default().to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    (commits, total)
 }
 
 fn parse_checks(node: &Value) -> Vec<CheckInfo> {
@@ -700,6 +749,7 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
         .unwrap_or_default();
 
     let (comments, comments_total) = parse_comments(node);
+    let (commits, commits_total) = parse_commit_history(node);
 
     // 関連 = Development リンク + 本文で言及した相手 + 自分に言及した相手(URL で重複排除)。
     // 本文言及の解決失敗で詳細表示全体を壊さないよう、そこだけベストエフォート
@@ -760,6 +810,8 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
         review_decision: node["reviewDecision"].as_str().map(String::from),
         checks: parse_checks(node),
         reviews,
+        commits,
+        commits_total,
         comments,
         comments_total,
         related,
@@ -894,6 +946,11 @@ mod tests {
         assert!(detail.base_ref.is_some());
         assert!(detail.head_ref.is_some());
         assert!(detail.changed_files > 0);
+        assert!(!detail.commits.is_empty(), "PR should have commit history");
+        assert!(detail.commits_total >= detail.commits.len() as i64);
+        let first = &detail.commits[0];
+        assert!(!first.short_oid.is_empty());
+        assert!(first.url.starts_with("https://"));
     }
 }
 
