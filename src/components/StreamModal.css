@@ -32,7 +32,7 @@
 
 .query-mode-tab.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 .query-set-chip-row {
@@ -163,7 +163,7 @@
 
 .relations-mode-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 .relations-mode-btn:disabled {
