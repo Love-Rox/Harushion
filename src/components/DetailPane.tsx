@@ -749,6 +749,61 @@ export function DetailPane({
             </div>
           </div>
 
+          {(detail.projects.length > 0 || detail.projectsScopeMissing) && (
+            <div className="prop-row">
+              <span className="prop-label">{t("detail.projects")}</span>
+              <div className="prop-value prop-value-stack">
+                {detail.projectsScopeMissing && (
+                  <span className="fg-muted">{t("detail.projectsScopeHint")}</span>
+                )}
+                {detail.projects.map((p) => {
+                  const fieldId = p.statusFieldId;
+                  return (
+                    <div key={p.itemId} className="project-row">
+                      <button
+                        className="project-link"
+                        title={p.url}
+                        onClick={() => onOpenUrl(p.url)}
+                      >
+                        {p.title}
+                      </button>
+                      {fieldId != null && p.statusOptions.length > 0 ? (
+                        <select
+                          className="epic-add-select"
+                          value={p.statusOptionId ?? ""}
+                          disabled={actionPending}
+                          onChange={(e) => {
+                            const optionId = e.target.value;
+                            if (optionId && optionId !== p.statusOptionId) {
+                              void onAction({
+                                type: "setProjectStatus",
+                                itemId: p.itemId,
+                                projectId: p.projectId,
+                                fieldId,
+                                optionId,
+                              });
+                            }
+                          }}
+                        >
+                          {p.statusOptionId == null && (
+                            <option value="">{t("detail.noStatus")}</option>
+                          )}
+                          {p.statusOptions.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        p.status && <span className="fg-muted">{p.status}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {detail.related.length > 0 && (
             <div className="prop-row">
               <span className="prop-label">{t("detail.related")}</span>

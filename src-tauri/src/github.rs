@@ -335,6 +335,28 @@ pub struct ReviewInfo {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectStatusOption {
+    pub id: String,
+    pub name: String,
+}
+
+/// アイテムが所属する Project (v2) 1件分。ID 群は gh project item-edit にそのまま渡せる node ID
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectItemInfo {
+    pub item_id: String,
+    pub project_id: String,
+    pub title: String,
+    pub number: i64,
+    pub url: String,
+    pub status: Option<String>,
+    pub status_option_id: Option<String>,
+    pub status_field_id: Option<String>,
+    pub status_options: Vec<ProjectStatusOption>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CommitInfo {
     pub short_oid: String,
     pub message: String,
@@ -387,6 +409,8 @@ pub struct ItemDetail {
     pub commits_total: i64,
     pub comments: Vec<CommentInfo>,
     pub comments_total: i64,
+    pub projects: Vec<ProjectItemInfo>,
+    pub projects_scope_missing: bool,
     pub related: Vec<RelatedItem>,
     pub related_total: i64,
 }
@@ -699,6 +723,79 @@ async fn resolve_related_urls(state: &AppState, urls: &[String]) -> Result<Vec<R
     Ok(results)
 }
 
+const PROJECT_ITEMS_FRAGMENT: &str = r#"
+projectItems(first: 10) {
+  nodes {
+    id
+    project {
+      id title number url
+      field(name: "Status") {
+        ... on ProjectV2SingleSelectField { id options { id name } }
+      }
+    }
+    fieldValueByName(name: "Status") {
+      ... on ProjectV2ItemFieldSingleSelectValue { name optionId }
+    }
+  }
+}
+"#;
+
+/// アイテムが所属する Project (v2) と Status を取得する。
+/// トークンに read:project スコープが必要なため DETAIL_QUERY とは分離し、
+/// スコープ不足(Ok(None))と他のエラー(Err)を呼び出し側で区別できるようにする
+async fn fetch_project_items(
+    state: &AppState,
+    url: &str,
+) -> Result<Option<Vec<ProjectItemInfo>>, String> {
+    let query = format!(
+        "query($url: URI!) {{ resource(url: $url) {{ \
+         ... on Issue {{ {PROJECT_ITEMS_FRAGMENT} }} \
+         ... on PullRequest {{ {PROJECT_ITEMS_FRAGMENT} }} }} }}"
+    );
+    let data = match state.graphql(&query, json!({ "url": url })).await {
+        Ok(data) => data,
+        Err(e) if e.contains("read:project") || e.contains("INSUFFICIENT_SCOPES") => {
+            return Ok(None);
+        }
+        Err(e) => return Err(e),
+    };
+    let projects = data["resource"]["projectItems"]["nodes"]
+        .as_array()
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|n| {
+                    let p = &n["project"];
+                    Some(ProjectItemInfo {
+                        item_id: n["id"].as_str()?.to_string(),
+                        project_id: p["id"].as_str()?.to_string(),
+                        title: p["title"].as_str().unwrap_or_default().to_string(),
+                        number: p["number"].as_i64().unwrap_or(0),
+                        url: p["url"].as_str().unwrap_or_default().to_string(),
+                        status: n["fieldValueByName"]["name"].as_str().map(String::from),
+                        status_option_id: n["fieldValueByName"]["optionId"].as_str().map(String::from),
+                        status_field_id: p["field"]["id"].as_str().map(String::from),
+                        status_options: p["field"]["options"]
+                            .as_array()
+                            .map(|os| {
+                                os.iter()
+                                    .filter_map(|o| {
+                                        Some(ProjectStatusOption {
+                                            id: o["id"].as_str()?.to_string(),
+                                            name: o["name"].as_str()?.to_string(),
+                                        })
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(Some(projects))
+}
+
 pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail, String> {
     let data = state.graphql(DETAIL_QUERY, json!({ "url": url })).await?;
     let node = &data["resource"];
@@ -782,6 +879,17 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
     let related_total = related.len() as i64;
     related.truncate(10);
 
+    // Project (v2) はスコープ不足で取れないことがある。詳細表示全体は壊さず、
+    // スコープ不足はフラグで伝えて UI 側で案内する
+    let (projects, projects_scope_missing) = match fetch_project_items(state, &self_url).await {
+        Ok(Some(items)) => (items, false),
+        Ok(None) => (Vec::new(), true),
+        Err(e) => {
+            eprintln!("プロジェクト情報の取得に失敗: {e}");
+            (Vec::new(), false)
+        }
+    };
+
     Ok(ItemDetail {
         kind: kind.to_string(),
         number: node["number"].as_i64().unwrap_or(0),
@@ -814,6 +922,8 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
         commits_total,
         comments,
         comments_total,
+        projects,
+        projects_scope_missing,
         related,
         related_total,
     })

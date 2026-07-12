@@ -17,6 +17,7 @@ pub enum ItemAction {
     UpdateBranch,
     EditLabels { add: Vec<String>, remove: Vec<String> },
     AssignMe { remove: bool },
+    SetProjectStatus { item_id: String, project_id: String, field_id: String, option_id: String },
 }
 
 /// gh の起動引数と stdin 入力。本文は引数ではなく stdin で渡す(長文・改行・引用符対策)。
@@ -122,6 +123,20 @@ pub fn build_invocation(url: &str, kind: &str, action: &ItemAction) -> Result<Gh
         ItemAction::AssignMe { remove } => {
             let flag = if *remove { "--remove-assignee" } else { "--add-assignee" };
             strs(&[noun, "edit", url, flag, "@me"])
+        }
+        ItemAction::SetProjectStatus { item_id, project_id, field_id, option_id } => {
+            for id in [item_id, project_id, field_id, option_id] {
+                if id.is_empty() || id.starts_with('-') {
+                    return Err(format!("不正な Project ID です: {id}"));
+                }
+            }
+            strs(&[
+                "project", "item-edit",
+                "--id", item_id,
+                "--project-id", project_id,
+                "--field-id", field_id,
+                "--single-select-option-id", option_id,
+            ])
         }
     };
     Ok(GhInvocation { args, stdin })
@@ -276,6 +291,36 @@ mod tests {
     }
 
     #[test]
+    fn set_project_status_uses_node_ids() {
+        let action = ItemAction::SetProjectStatus {
+            item_id: "PVTI_x".into(),
+            project_id: "PVT_x".into(),
+            field_id: "PVTSSF_x".into(),
+            option_id: "abc123".into(),
+        };
+        let inv = build_invocation(URL, "issue", &action).unwrap();
+        assert_eq!(
+            args(&inv),
+            [
+                "project", "item-edit",
+                "--id", "PVTI_x",
+                "--project-id", "PVT_x",
+                "--field-id", "PVTSSF_x",
+                "--single-select-option-id", "abc123",
+            ]
+        );
+
+        // 空・先頭ハイフンの ID は引数注入防止のため拒否
+        let bad = ItemAction::SetProjectStatus {
+            item_id: "--evil".into(),
+            project_id: "PVT_x".into(),
+            field_id: "PVTSSF_x".into(),
+            option_id: "abc123".into(),
+        };
+        assert!(build_invocation(URL, "issue", &bad).is_err());
+    }
+
+    #[test]
     fn rejects_non_github_urls_and_unknown_kind() {
         assert!(build_invocation("https://evil.example/x", "issue", &ItemAction::Close).is_err());
         assert!(build_invocation(URL, "gist", &ItemAction::Close).is_err());
@@ -388,6 +433,19 @@ mod tests {
         let a: ItemAction =
             serde_json::from_str(r#"{"type":"editLabels","add":["bug"],"remove":["wip"]}"#).unwrap();
         assert_eq!(a, ItemAction::EditLabels { add: vec!["bug".into()], remove: vec!["wip".into()] });
+        let a: ItemAction = serde_json::from_str(
+            r#"{"type":"setProjectStatus","itemId":"PVTI_x","projectId":"PVT_x","fieldId":"PVTSSF_x","optionId":"o1"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            a,
+            ItemAction::SetProjectStatus {
+                item_id: "PVTI_x".into(),
+                project_id: "PVT_x".into(),
+                field_id: "PVTSSF_x".into(),
+                option_id: "o1".into(),
+            }
+        );
     }
 
     /// Finder/Dock 起動(launchd の最小 PATH)を模擬し、fix_path_env::fix() 後に

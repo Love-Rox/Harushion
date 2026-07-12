@@ -65,6 +65,21 @@ export type CheckInfo = { name: string; status: string; url: string | null };
 // state: APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED | PENDING
 export type ReviewInfo = { author: string | null; state: string };
 
+export type ProjectStatusOption = { id: string; name: string };
+
+// アイテムが所属する Project (v2) 1件分。ID 群は gh project item-edit に渡す node ID
+export type ProjectItemInfo = {
+  itemId: string;
+  projectId: string;
+  title: string;
+  number: number;
+  url: string;
+  status: string | null; // 現在の Status 名(未設定なら null)
+  statusOptionId: string | null;
+  statusFieldId: string | null; // Status フィールドがリネーム/削除されていると null
+  statusOptions: ProjectStatusOption[];
+};
+
 // PR のコミット履歴の1件。author は GitHub ユーザーの login、紐付かなければ git の author 名
 export type CommitInfo = {
   shortOid: string;
@@ -116,6 +131,8 @@ export type ItemDetail = {
   commitsTotal: number;
   comments: CommentInfo[]; // last 30, chronological
   commentsTotal: number;
+  projects: ProjectItemInfo[]; // first 10 Project (v2) memberships
+  projectsScopeMissing: boolean; // true = トークンに read:project スコープがなく取得不可
   related: RelatedItem[]; // first 10 Development links
   relatedTotal: number;
 };
@@ -132,7 +149,14 @@ export type ItemAction =
   | { type: "ready"; undo: boolean } // undo=true → convert back to draft
   | { type: "updateBranch" }
   | { type: "editLabels"; add: string[]; remove: string[] }
-  | { type: "assignMe"; remove: boolean };
+  | { type: "assignMe"; remove: boolean }
+  | {
+      type: "setProjectStatus";
+      itemId: string;
+      projectId: string;
+      fieldId: string;
+      optionId: string;
+    };
 
 export type UpdateInfo = {
   current: string;

@@ -85,6 +85,10 @@ export const ja = {
     checks: "チェック",
     reviews: "レビュー",
     epics: "エピック",
+    projects: "プロジェクト",
+    projectsScopeHint:
+      "表示には project スコープが必要です。ターミナルで gh auth refresh -s project を実行してください",
+    noStatus: "Status なし",
     related: "関連",
     addToEpic: "+ 追加…",
     removeFromEpic: "{name} をエピックから削除",
