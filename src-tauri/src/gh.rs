@@ -451,10 +451,17 @@ mod tests {
     /// Finder/Dock 起動(launchd の最小 PATH)を模擬し、fix_path_env::fix() 後に
     /// gh が解決できることを検証する。gh が Homebrew 等の非標準 PATH にある
     /// ローカル環境が前提のためオプトイン(CI では走らせない)。
-    /// PATH をプロセス全体で書き換えるので、他のテストと並走させないこと。
+    /// PATH をプロセス全体で書き換え、並走中の他テストの gh 実行を壊すため、
+    /// `cargo test -- --ignored` の一括実行では環境変数なしで即スキップさせ、
+    /// 単独実行時のみ有効化する:
+    /// `HARUSHION_PATH_TEST=1 cargo test path_fix -- --ignored`
     #[test]
-    #[ignore]
+    #[ignore = "rewrites process-wide PATH; opt-in via HARUSHION_PATH_TEST"]
     fn path_fix_resolves_gh_from_minimal_path() {
+        if std::env::var("HARUSHION_PATH_TEST").is_err() {
+            eprintln!("HARUSHION_PATH_TEST 未設定のためスキップ");
+            return;
+        }
         std::env::set_var("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
         let before = std::process::Command::new("gh").arg("--version").output();
         assert!(before.is_err(), "前提が不成立: 最小 PATH でも gh が見つかっています");
