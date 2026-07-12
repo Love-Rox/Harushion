@@ -366,6 +366,15 @@ pub struct CommitInfo {
     pub url: String,
 }
 
+/// コメントとコミットを時系列で混ぜたタイムラインの1エントリ(GitHub の Conversation 相当)。
+/// kind タグ付きでフラットに serialize される({"kind":"comment", ...CommentInfo})
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TimelineEntry {
+    Comment(CommentInfo),
+    Commit(CommitInfo),
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelatedItem {
@@ -405,10 +414,8 @@ pub struct ItemDetail {
     pub review_decision: Option<String>,
     pub checks: Vec<CheckInfo>,
     pub reviews: Vec<ReviewInfo>,
-    pub commits: Vec<CommitInfo>,
-    pub commits_total: i64,
-    pub comments: Vec<CommentInfo>,
-    pub comments_total: i64,
+    pub timeline: Vec<TimelineEntry>,
+    pub timeline_total: i64,
     pub projects: Vec<ProjectItemInfo>,
     pub projects_scope_missing: bool,
     pub related: Vec<RelatedItem>,
@@ -441,9 +448,12 @@ query($url: URI!) {
           }
         }
       }
-      comments(last: 30) {
+      timeline: timelineItems(last: 30, itemTypes: [ISSUE_COMMENT]) {
         totalCount
-        nodes { author { login avatarUrl } bodyHTML createdAt }
+        nodes {
+          __typename
+          ... on IssueComment { author { login avatarUrl } bodyHTML createdAt }
+        }
       }
     }
     ... on PullRequest {
@@ -471,12 +481,16 @@ query($url: URI!) {
         }
       }
       latestReviews(first: 15) { nodes { author { login } state } }
-      commitHistory: commits(last: 30) {
+      timeline: timelineItems(last: 40, itemTypes: [ISSUE_COMMENT, PULL_REQUEST_COMMIT]) {
         totalCount
         nodes {
-          commit {
-            abbreviatedOid messageHeadline committedDate url
-            author { name avatarUrl user { login } }
+          __typename
+          ... on IssueComment { author { login avatarUrl } bodyHTML createdAt }
+          ... on PullRequestCommit {
+            commit {
+              abbreviatedOid messageHeadline committedDate url
+              author { name avatarUrl user { login } }
+            }
           }
         }
       }
@@ -495,61 +509,47 @@ query($url: URI!) {
           }
         }
       }
-      comments(last: 30) {
-        totalCount
-        nodes { author { login avatarUrl } bodyHTML createdAt }
-      }
     }
   }
 }
 "#;
 
-fn parse_comments(node: &Value) -> (Vec<CommentInfo>, i64) {
-    let total = node["comments"]["totalCount"].as_i64().unwrap_or(0);
-    let comments = node["comments"]["nodes"]
+/// コメント+コミット(PR のみ)の統合タイムライン。timelineItems は last:N の
+/// 時系列順で返るので、そのまま古い→新しい順で表示できる
+fn parse_timeline(node: &Value) -> (Vec<TimelineEntry>, i64) {
+    let total = node["timeline"]["totalCount"].as_i64().unwrap_or(0);
+    let entries = node["timeline"]["nodes"]
         .as_array()
         .map(|nodes| {
             nodes
                 .iter()
-                .filter_map(|c| {
-                    Some(CommentInfo {
-                        author: c["author"]["login"].as_str().map(String::from),
-                        author_avatar: c["author"]["avatarUrl"].as_str().map(String::from),
-                        body_html: c["bodyHTML"].as_str()?.to_string(),
-                        created_at: c["createdAt"].as_str().unwrap_or_default().to_string(),
-                    })
+                .filter_map(|n| match n["__typename"].as_str()? {
+                    "IssueComment" => Some(TimelineEntry::Comment(CommentInfo {
+                        author: n["author"]["login"].as_str().map(String::from),
+                        author_avatar: n["author"]["avatarUrl"].as_str().map(String::from),
+                        body_html: n["bodyHTML"].as_str()?.to_string(),
+                        created_at: n["createdAt"].as_str().unwrap_or_default().to_string(),
+                    })),
+                    "PullRequestCommit" => {
+                        let c = &n["commit"];
+                        Some(TimelineEntry::Commit(CommitInfo {
+                            short_oid: c["abbreviatedOid"].as_str()?.to_string(),
+                            message: c["messageHeadline"].as_str().unwrap_or_default().to_string(),
+                            author: c["author"]["user"]["login"]
+                                .as_str()
+                                .or(c["author"]["name"].as_str())
+                                .map(String::from),
+                            author_avatar: c["author"]["avatarUrl"].as_str().map(String::from),
+                            date: c["committedDate"].as_str().unwrap_or_default().to_string(),
+                            url: c["url"].as_str().unwrap_or_default().to_string(),
+                        }))
+                    }
+                    _ => None,
                 })
                 .collect()
         })
         .unwrap_or_default();
-    (comments, total)
-}
-
-fn parse_commit_history(node: &Value) -> (Vec<CommitInfo>, i64) {
-    let total = node["commitHistory"]["totalCount"].as_i64().unwrap_or(0);
-    let commits = node["commitHistory"]["nodes"]
-        .as_array()
-        .map(|nodes| {
-            nodes
-                .iter()
-                .filter_map(|n| {
-                    let c = &n["commit"];
-                    Some(CommitInfo {
-                        short_oid: c["abbreviatedOid"].as_str()?.to_string(),
-                        message: c["messageHeadline"].as_str().unwrap_or_default().to_string(),
-                        author: c["author"]["user"]["login"]
-                            .as_str()
-                            .or(c["author"]["name"].as_str())
-                            .map(String::from),
-                        author_avatar: c["author"]["avatarUrl"].as_str().map(String::from),
-                        date: c["committedDate"].as_str().unwrap_or_default().to_string(),
-                        url: c["url"].as_str().unwrap_or_default().to_string(),
-                    })
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    (commits, total)
+    (entries, total)
 }
 
 fn parse_checks(node: &Value) -> Vec<CheckInfo> {
@@ -845,8 +845,7 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
         })
         .unwrap_or_default();
 
-    let (comments, comments_total) = parse_comments(node);
-    let (commits, commits_total) = parse_commit_history(node);
+    let (timeline, timeline_total) = parse_timeline(node);
 
     // 関連 = Development リンク + 本文で言及した相手 + 自分に言及した相手(URL で重複排除)。
     // 本文言及の解決失敗で詳細表示全体を壊さないよう、そこだけベストエフォート
@@ -918,10 +917,8 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
         review_decision: node["reviewDecision"].as_str().map(String::from),
         checks: parse_checks(node),
         reviews,
-        commits,
-        commits_total,
-        comments,
-        comments_total,
+        timeline,
+        timeline_total,
         projects,
         projects_scope_missing,
         related,
@@ -991,8 +988,11 @@ mod tests {
         assert_eq!(detail.repo, "tauri-apps/tauri");
         assert!(!detail.title.is_empty());
         assert!(!detail.body_html.is_empty());
-        assert!(detail.comments_total > 0);
-        assert!(!detail.comments.is_empty());
+        assert!(detail.timeline_total > 0);
+        assert!(
+            detail.timeline.iter().any(|e| matches!(e, TimelineEntry::Comment(_))),
+            "issue timeline should contain comments"
+        );
         // この Issue は他の Issue から複数回言及されている(相互参照メンションの実データ検証)
         assert!(!detail.related.is_empty(), "相互参照メンションが取れるはず");
     }
@@ -1056,11 +1056,17 @@ mod tests {
         assert!(detail.base_ref.is_some());
         assert!(detail.head_ref.is_some());
         assert!(detail.changed_files > 0);
-        assert!(!detail.commits.is_empty(), "PR should have commit history");
-        assert!(detail.commits_total >= detail.commits.len() as i64);
-        let first = &detail.commits[0];
-        assert!(!first.short_oid.is_empty());
-        assert!(first.url.starts_with("https://"));
+        assert!(detail.timeline_total >= detail.timeline.len() as i64);
+        let commit = detail
+            .timeline
+            .iter()
+            .find_map(|e| match e {
+                TimelineEntry::Commit(c) => Some(c),
+                _ => None,
+            })
+            .expect("PR timeline should contain commits");
+        assert!(!commit.short_oid.is_empty());
+        assert!(commit.url.starts_with("https://"));
     }
 }
 

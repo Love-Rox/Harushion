@@ -90,6 +90,9 @@ export type CommitInfo = {
   url: string; // commit page on github.com
 };
 
+// コメントとコミットを時系列で混ぜたタイムラインの1エントリ(GitHub の Conversation 相当)
+export type TimelineEntry = ({ kind: "comment" } & CommentInfo) | ({ kind: "commit" } & CommitInfo);
+
 // Development リンク(Issue⇔PR)。Issue 詳細では関連 PR、PR 詳細では関連 Issue が入る
 export type RelatedItem = {
   kind: "issue" | "pr";
@@ -127,10 +130,8 @@ export type ItemDetail = {
   reviewDecision: string | null; // APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED | null
   checks: CheckInfo[];
   reviews: ReviewInfo[]; // latest review per reviewer
-  commits: CommitInfo[]; // last 30, chronological
-  commitsTotal: number;
-  comments: CommentInfo[]; // last 30, chronological
-  commentsTotal: number;
+  timeline: TimelineEntry[]; // last 30-40 comments+commits, chronological
+  timelineTotal: number;
   projects: ProjectItemInfo[]; // first 10 Project (v2) memberships
   projectsScopeMissing: boolean; // true = トークンに read:project スコープがなく取得不可
   related: RelatedItem[]; // first 10 Development links

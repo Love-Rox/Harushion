@@ -889,61 +889,48 @@ export function DetailPane({
           )}
         </section>
 
-        {detail.kind === "pr" && detail.commits.length > 0 && (
-          <section className="commits-section">
-            <h3 className="detail-section-title">
-              {t("detail.commits")}
-              {detail.commitsTotal > 0 && ` (${detail.commitsTotal})`}
-            </h3>
-            {detail.commitsTotal > detail.commits.length && (
-              <p className="comments-hint">
-                {t("detail.moreCommits", { n: detail.commitsTotal - detail.commits.length })}
-              </p>
-            )}
-            {detail.commits.map((c) => (
-              <div key={c.shortOid} className="commit-row" onClick={() => onOpenUrl(c.url)}>
-                {c.authorAvatar ? (
-                  <img src={c.authorAvatar} className="avatar avatar-small" alt="" />
+        <section className="comments-section">
+          <h3 className="detail-section-title">
+            {t("detail.timeline")}
+            {detail.timelineTotal > 0 && ` (${detail.timelineTotal})`}
+          </h3>
+          {detail.timelineTotal > detail.timeline.length && (
+            <p className="comments-hint">
+              {t("detail.moreTimeline", { n: detail.timelineTotal - detail.timeline.length })}
+            </p>
+          )}
+          {detail.timeline.map((e, i) =>
+            e.kind === "comment" ? (
+              <article className="comment-card" key={i}>
+                <div className="comment-header">
+                  {e.authorAvatar && (
+                    <img src={e.authorAvatar} className="avatar avatar-small" alt="" />
+                  )}
+                  <span className="comment-author">{e.author ?? "unknown"}</span>
+                  <span className="comment-time">{relativeTime(e.createdAt)}</span>
+                </div>
+                <div
+                  className="md comment-body"
+                  onClick={handleMdClick}
+                  dangerouslySetInnerHTML={{ __html: e.bodyHtml }}
+                />
+              </article>
+            ) : (
+              <div key={i} className="commit-row" onClick={() => onOpenUrl(e.url)}>
+                {e.authorAvatar ? (
+                  <img src={e.authorAvatar} className="avatar avatar-small" alt="" />
                 ) : (
                   <span className="avatar avatar-small avatar-placeholder" />
                 )}
-                <span className="commit-message" title={c.message}>
-                  {c.message}
+                <span className="commit-message" title={e.message}>
+                  {e.message}
                 </span>
-                <span className="commit-author">{c.author ?? "unknown"}</span>
-                <code className="commit-oid">{c.shortOid}</code>
-                <span className="commit-time">{relativeTime(c.date)}</span>
+                <span className="commit-author">{e.author ?? "unknown"}</span>
+                <code className="commit-oid">{e.shortOid}</code>
+                <span className="commit-time">{relativeTime(e.date)}</span>
               </div>
-            ))}
-          </section>
-        )}
-
-        <section className="comments-section">
-          <h3 className="detail-section-title">
-            {t("detail.comments")}
-            {detail.commentsTotal > 0 && ` (${detail.commentsTotal})`}
-          </h3>
-          {detail.commentsTotal > detail.comments.length && (
-            <p className="comments-hint">
-              {t("detail.moreComments", { n: detail.commentsTotal - detail.comments.length })}
-            </p>
+            ),
           )}
-          {detail.comments.map((c, i) => (
-            <article className="comment-card" key={i}>
-              <div className="comment-header">
-                {c.authorAvatar && (
-                  <img src={c.authorAvatar} className="avatar avatar-small" alt="" />
-                )}
-                <span className="comment-author">{c.author ?? "unknown"}</span>
-                <span className="comment-time">{relativeTime(c.createdAt)}</span>
-              </div>
-              <div
-                className="md comment-body"
-                onClick={handleMdClick}
-                dangerouslySetInnerHTML={{ __html: c.bodyHtml }}
-              />
-            </article>
-          ))}
         </section>
 
         <div className="comment-composer">

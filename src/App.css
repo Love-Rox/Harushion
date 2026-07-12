@@ -1200,11 +1200,6 @@ body {
   padding: 14px 18px;
 }
 
-.commits-section {
-  display: flex;
-  flex-direction: column;
-}
-
 .commit-row {
   display: flex;
   align-items: center;
