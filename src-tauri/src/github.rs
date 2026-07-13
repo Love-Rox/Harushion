@@ -399,12 +399,28 @@ pub struct CommitInfo {
 }
 
 /// コメントとコミットを時系列で混ぜたタイムラインの1エントリ(GitHub の Conversation 相当)。
+/// Issue のタイムラインに混ぜる「紐づいた PR」(クロスリファレンス)。
+/// actor はリンク(言及)した人の login
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkedPrInfo {
+    pub number: i64,
+    pub title: String,
+    pub url: String,
+    pub state: String,
+    pub is_draft: bool,
+    pub repo: String,
+    pub actor: Option<String>,
+    pub created_at: String,
+}
+
 /// kind タグ付きでフラットに serialize される({"kind":"comment", ...CommentInfo})
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TimelineEntry {
     Comment(CommentInfo),
     Commit(CommitInfo),
+    LinkedPr(LinkedPrInfo),
 }
 
 #[derive(Serialize)]
@@ -481,11 +497,19 @@ query($url: URI!) {
           }
         }
       }
-      timeline: timelineItems(last: 30, itemTypes: [ISSUE_COMMENT]) {
+      timeline: timelineItems(last: 30, itemTypes: [ISSUE_COMMENT, CROSS_REFERENCED_EVENT]) {
         totalCount
         nodes {
           __typename
           ... on IssueComment { author { login avatarUrl } bodyHTML createdAt }
+          ... on CrossReferencedEvent {
+            createdAt
+            actor { login }
+            source {
+              __typename
+              ... on PullRequest { number title url state isDraft repository { nameWithOwner } }
+            }
+          }
         }
       }
     }
@@ -558,8 +582,8 @@ query($url: URI!) {
 }
 "#;
 
-/// コメント+コミット(PR のみ)の統合タイムライン。timelineItems は last:N の
-/// 時系列順で返るので、そのまま古い→新しい順で表示できる
+/// コメント+コミット(PR のみ)+紐づいた PR(Issue のみ)の統合タイムライン。
+/// timelineItems は last:N の時系列順で返るので、そのまま古い→新しい順で表示できる
 fn parse_timeline(node: &Value) -> (Vec<TimelineEntry>, i64) {
     let total = node["timeline"]["totalCount"].as_i64().unwrap_or(0);
     let entries = node["timeline"]["nodes"]
@@ -574,6 +598,27 @@ fn parse_timeline(node: &Value) -> (Vec<TimelineEntry>, i64) {
                         body_html: n["bodyHTML"].as_str()?.to_string(),
                         created_at: n["createdAt"].as_str().unwrap_or_default().to_string(),
                     })),
+                    // Issue へのクロスリファレンスのうち PR 起点のもの(=紐づいた PR)。
+                    // Issue 起点の言及はノイズになりやすいので「関連」行に任せる
+                    "CrossReferencedEvent" => {
+                        let s = &n["source"];
+                        if s["__typename"].as_str()? != "PullRequest" {
+                            return None;
+                        }
+                        Some(TimelineEntry::LinkedPr(LinkedPrInfo {
+                            number: s["number"].as_i64()?,
+                            title: s["title"].as_str().unwrap_or_default().to_string(),
+                            url: s["url"].as_str()?.to_string(),
+                            state: s["state"].as_str().unwrap_or_default().to_string(),
+                            is_draft: s["isDraft"].as_bool().unwrap_or(false),
+                            repo: s["repository"]["nameWithOwner"]
+                                .as_str()
+                                .unwrap_or_default()
+                                .to_string(),
+                            actor: n["actor"]["login"].as_str().map(String::from),
+                            created_at: n["createdAt"].as_str().unwrap_or_default().to_string(),
+                        }))
+                    }
                     "PullRequestCommit" => {
                         let c = &n["commit"];
                         Some(TimelineEntry::Commit(CommitInfo {

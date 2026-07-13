@@ -91,8 +91,23 @@ export type CommitInfo = {
   url: string; // commit page on github.com
 };
 
-// コメントとコミットを時系列で混ぜたタイムラインの1エントリ(GitHub の Conversation 相当)
-export type TimelineEntry = ({ kind: "comment" } & CommentInfo) | ({ kind: "commit" } & CommitInfo);
+// Issue のタイムラインに混ざる「紐づいた PR」(クロスリファレンス)。actor はリンクした人
+export type LinkedPrInfo = {
+  number: number;
+  title: string;
+  url: string;
+  state: string; // OPEN | CLOSED | MERGED
+  isDraft: boolean;
+  repo: string; // "owner/name"
+  actor: string | null;
+  createdAt: string; // ISO8601
+};
+
+// コメント・コミット・紐づきPRを時系列で混ぜたタイムラインの1エントリ(GitHub の Conversation 相当)
+export type TimelineEntry =
+  | ({ kind: "comment" } & CommentInfo)
+  | ({ kind: "commit" } & CommitInfo)
+  | ({ kind: "linkedPr" } & LinkedPrInfo);
 
 // Development リンク(Issue⇔PR)。Issue 詳細では関連 PR、PR 詳細では関連 Issue が入る
 export type RelatedItem = {

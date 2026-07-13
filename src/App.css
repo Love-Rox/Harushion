@@ -774,10 +774,6 @@ code {
   color: var(--fg-muted);
 }
 
-.detail-number {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
 .detail-eyebrow-spacer {
   flex: 1;
 }
@@ -813,12 +809,6 @@ code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.detail-header-meta .state-badge {
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-}
-
 .detail-author {
   font-weight: 600;
   color: var(--fg);
@@ -841,54 +831,174 @@ code {
   font-size: 11px;
 }
 
-.detail-props {
+/* ---- GitHub 風 2 カラム(本文+タイムライン / メタ情報サイドバー) ---- */
+
+.detail-pane {
+  container-type: inline-size;
+}
+
+.detail-columns {
   display: flex;
-  flex-direction: column;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  align-items: flex-start;
+  gap: 18px;
 }
 
-.prop-row {
-  display: flex;
-  gap: 12px;
-  padding: 8px 12px;
-  font-size: 12.5px;
-}
-
-.prop-row + .prop-row {
-  border-top: 1px solid var(--border);
-}
-
-.prop-label {
-  flex-shrink: 0;
-  width: 64px;
-  padding-top: 3px;
-  color: var(--fg-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.prop-value {
+.detail-main {
+  order: 1;
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.detail-sidebar {
+  order: 2;
+  width: 216px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ペインが狭いときはサイドバーを本文の下へ */
+@container (max-width: 700px) {
+  .detail-columns {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .detail-sidebar {
+    width: 100%;
+  }
+}
+
+.sidebar-section {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+
+.sidebar-section-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+/* DOM 順は据え置き、表示順だけ GitHub のサイドバーに合わせる */
+.sec-reviewers {
+  order: 1;
+}
+.sec-assignees {
+  order: 2;
+}
+.sec-labels {
+  order: 3;
+}
+.sec-milestone {
+  order: 4;
+}
+.sec-projects {
+  order: 5;
+}
+.sec-development {
+  order: 6;
+}
+.sec-epics {
+  order: 7;
+}
+
+.sidebar-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* サイドバー内のポップオーバーは右端に寄せてペイン外へのはみ出しを防ぐ */
+.detail-sidebar .popover {
+  left: auto;
+  right: 0;
+  transform-origin: top right;
+}
+
+/* GitHub の状態ピル。状態色は GitHub 実色(両テーマ共通)+白文字 */
+.state-pill {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  position: relative;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
 }
 
-.prop-value-stack {
+.state-pill svg {
+  fill: currentColor;
+}
+
+.state-pill.state-open {
+  background: #1f883d;
+}
+
+.state-pill.state-merged,
+.state-pill.state-done {
+  background: #8250df;
+}
+
+.state-pill.state-closed {
+  background: #cf222e;
+}
+
+.state-pill.state-draft {
+  background: #59636e;
+}
+
+.detail-title-number {
+  color: var(--fg-muted);
+  font-weight: 400;
+}
+
+/* マージボックス(GitHub のマージエリア相当) */
+.merge-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.merge-box-row {
+  padding: 10px 14px;
+}
+
+.merge-box-row + .merge-box-row {
+  border-top: 1px solid var(--border);
+}
+
+.merge-box-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.merge-box-checks {
+  display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 0;
 }
 
-.pr-info {
-  gap: 10px;
-  font-size: 12px;
+.merge-box-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
 }
 
 .pr-branches code {
@@ -1151,13 +1261,6 @@ code {
   font-size: 12px;
 }
 
-.action-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
 .merge-controls,
 .review-controls {
   display: flex;
@@ -1275,13 +1378,6 @@ code {
   border-color: #d4a72c;
 }
 
-.detail-body-section {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px 18px;
-}
-
 .commit-row {
   display: flex;
   align-items: center;
@@ -1289,6 +1385,34 @@ code {
   padding: 4px 0;
   font-size: 13px;
   cursor: pointer;
+}
+
+/* タイムライン内の「紐づいた PR」行。クリックで関連リンクと同じアプリ内遷移 */
+.timeline-ref-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.timeline-ref-row:hover .related-title {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.timeline-ref-note {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: 11.5px;
 }
 
 .commit-row:hover .commit-message {
@@ -1323,13 +1447,47 @@ code {
 
 .avatar-placeholder {
   display: inline-block;
+  border-radius: 50%;
   background: var(--border);
 }
 
 .comments-section {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* GitHub の Conversation を貫く接続線。行アイコンの中心(x=9)を通し、
+   各行の先頭要素(アバター/状態バッジ)の背景ハローで遮って透けを防ぐ */
+.comments-section::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 8px;
+  width: 2px;
+  background: var(--border);
+  z-index: -1;
+}
+
+.commit-row > .avatar,
+.commit-row > .avatar-placeholder {
+  box-shadow: 0 0 0 3px var(--bg);
+}
+
+.timeline-ref-row > .state-badge {
+  padding: 2px 4px;
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.comments-hint {
+  align-self: flex-start;
+  background: var(--bg);
+  box-shadow: 0 0 0 3px var(--bg);
 }
 
 .comments-hint {

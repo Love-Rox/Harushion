@@ -11,7 +11,7 @@ import type {
   Viewer,
 } from "../types";
 import { relativeTime } from "./format";
-import { StateBadge } from "./StateBadge";
+import { Octicon, resolveState, StateBadge } from "./StateBadge";
 import { useI18n } from "../i18n";
 import type { MessagePath, TFunction } from "../i18n";
 
@@ -81,6 +81,25 @@ function checkIconInfo(status: string): { char: string; className: string } {
     return { char: "✕", className: "check-failure" };
   }
   return { char: "●", className: "check-pending" };
+}
+
+/** GitHub の状態ピル(Open/Closed/Merged/Draft を塗りつぶし色+アイコンで) */
+function StatePill({
+  kind,
+  state,
+  isDraft,
+}: {
+  kind: "issue" | "pr";
+  state: string;
+  isDraft: boolean;
+}) {
+  const { icon, label: stateLabel, color } = resolveState(kind, state, isDraft);
+  return (
+    <span className={`state-pill ${color}`}>
+      <Octicon paths={icon} size={14} />
+      {stateLabel}
+    </span>
+  );
 }
 
 function labelTextColor(hex: string): string {
@@ -302,191 +321,192 @@ export function DetailPane({
   const handleReadyToggle = (undo: boolean) => void onAction({ type: "ready", undo });
   const handleUpdateBranch = () => void onAction({ type: "updateBranch" });
 
-  const renderActionBar = () => {
-    const buttons: React.ReactNode[] = [];
+  // GitHub の「Close issue / Reopen」相当。コメント送信ボタンの隣に置く
+  const renderCloseReopen = () => {
+    if (detail.state === "MERGED") return null;
+    if (detail.state !== "OPEN") {
+      return (
+        <button className="btn" disabled={actionPending} onClick={() => void handleReopen()}>
+          {label("detail.reopen", "reopen")}
+        </button>
+      );
+    }
+    return confirmClose ? (
+      <span className="delete-confirm">
+        <span className="delete-confirm-text">{t("detail.closeConfirm")}</span>
+        <button
+          className="btn btn-danger"
+          disabled={actionPending}
+          onClick={() => void handleClose()}
+        >
+          {label("detail.confirmRun", "close")}
+        </button>
+        <button className="btn" disabled={actionPending} onClick={() => setConfirmClose(false)}>
+          {t("common.cancel")}
+        </button>
+      </span>
+    ) : (
+      <button className="btn" disabled={actionPending} onClick={() => setConfirmClose(true)}>
+        {t("detail.closeIssue")}
+      </button>
+    );
+  };
 
-    if (detail.kind === "issue") {
-      if (detail.state === "OPEN") {
-        buttons.push(
-          confirmClose ? (
-            <span className="delete-confirm" key="close-confirm">
-              <span className="delete-confirm-text">{t("detail.closeConfirm")}</span>
-              <button
-                className="btn btn-danger"
-                disabled={actionPending}
-                onClick={() => void handleClose()}
+  // GitHub のマージボックス相当。タイムライン末尾に置き、
+  // チェック・レビュー判定・マージ可否のまとめとマージ/レビュー操作を集約する
+  const renderMergeBox = () => {
+    if (detail.kind !== "pr") return null;
+    const open = detail.state === "OPEN";
+    if (!open && detail.checks.length === 0) return null;
+    return (
+      <div className="merge-box">
+        {(detail.reviewDecision || (open && detail.mergeable)) && (
+          <div className="merge-box-row merge-box-status">
+            {detail.reviewDecision && (
+              <span className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}>
+                {reviewDecisionLabel(t, detail.reviewDecision)}
+              </span>
+            )}
+            {open && detail.mergeable && (
+              <span
+                className={`mergeable-badge${detail.mergeable === "CONFLICTING" ? " warn" : ""}`}
               >
-                {label("detail.confirmRun", "close")}
-              </button>
-              <button
-                className="btn"
-                disabled={actionPending}
-                onClick={() => setConfirmClose(false)}
-              >
-                {t("common.cancel")}
-              </button>
-            </span>
-          ) : (
+                {mergeableLabel(t, detail.mergeable)}
+              </span>
+            )}
+          </div>
+        )}
+        {detail.checks.length > 0 && (
+          <div className="merge-box-row merge-box-checks">
+            {detail.checks.map((c, i) => {
+              const icon = checkIconInfo(c.status);
+              return (
+                <div
+                  key={`${c.name}-${i}`}
+                  className={`check-row${c.url ? " clickable" : ""}`}
+                  onClick={() => c.url && onOpenUrl(c.url)}
+                >
+                  <span className={`check-icon ${icon.className}`}>{icon.char}</span>
+                  <span className="check-name">{c.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {open && detail.isDraft && (
+          <div className="merge-box-row merge-box-actions">
             <button
-              key="close"
-              className="btn"
-              disabled={actionPending}
-              onClick={() => setConfirmClose(true)}
-            >
-              {t("detail.closeIssue")}
-            </button>
-          ),
-        );
-      } else {
-        buttons.push(
-          <button
-            key="reopen"
-            className="btn"
-            disabled={actionPending}
-            onClick={() => void handleReopen()}
-          >
-            {label("detail.reopen", "reopen")}
-          </button>,
-        );
-      }
-    } else {
-      if (detail.state === "OPEN") {
-        if (detail.isDraft) {
-          buttons.push(
-            <button
-              key="ready"
               className="btn btn-primary"
               disabled={actionPending}
               onClick={() => handleReadyToggle(false)}
             >
               {label("detail.readyForReview", "ready:false")}
-            </button>,
-          );
-        } else {
-          buttons.push(
-            <span className="merge-controls" key="merge">
-              <select
-                className="merge-method-select"
-                value={mergeMethod}
-                onChange={(e) => setMergeMethod(e.target.value as MergeMethod)}
-                disabled={actionPending}
-              >
-                <option value="merge">Merge</option>
-                <option value="squash">Squash</option>
-                <option value="rebase">Rebase</option>
-              </select>
-              <label className="field-row-inline">
-                <input
-                  type="checkbox"
-                  checked={deleteBranch}
-                  onChange={(e) => setDeleteBranch(e.target.checked)}
+            </button>
+          </div>
+        )}
+        {open && !detail.isDraft && (
+          <>
+            <div className="merge-box-row merge-box-actions">
+              <span className="merge-controls">
+                <select
+                  className="merge-method-select"
+                  value={mergeMethod}
+                  onChange={(e) => setMergeMethod(e.target.value as MergeMethod)}
                   disabled={actionPending}
-                />
-                {t("detail.deleteBranch")}
-              </label>
-              {confirmMerge ? (
-                <span className="delete-confirm">
-                  <span className="delete-confirm-text">{t("detail.mergeConfirm")}</span>
+                >
+                  <option value="merge">Merge</option>
+                  <option value="squash">Squash</option>
+                  <option value="rebase">Rebase</option>
+                </select>
+                <label className="field-row-inline">
+                  <input
+                    type="checkbox"
+                    checked={deleteBranch}
+                    onChange={(e) => setDeleteBranch(e.target.checked)}
+                    disabled={actionPending}
+                  />
+                  {t("detail.deleteBranch")}
+                </label>
+                {confirmMerge ? (
+                  <span className="delete-confirm">
+                    <span className="delete-confirm-text">{t("detail.mergeConfirm")}</span>
+                    <button
+                      className="btn btn-primary"
+                      disabled={actionPending}
+                      onClick={() => void handleMerge()}
+                    >
+                      {label("detail.confirmRun", "merge")}
+                    </button>
+                    <button
+                      className="btn"
+                      disabled={actionPending}
+                      onClick={() => setConfirmMerge(false)}
+                    >
+                      {t("common.cancel")}
+                    </button>
+                  </span>
+                ) : (
                   <button
                     className="btn btn-primary"
                     disabled={actionPending}
-                    onClick={() => void handleMerge()}
+                    onClick={() => setConfirmMerge(true)}
                   >
-                    {label("detail.confirmRun", "merge")}
+                    {t("detail.mergeButton")}
                   </button>
-                  <button
-                    className="btn"
-                    disabled={actionPending}
-                    onClick={() => setConfirmMerge(false)}
-                  >
-                    {t("common.cancel")}
-                  </button>
-                </span>
-              ) : (
-                <button
-                  className="btn btn-primary"
+                )}
+              </span>
+              <button
+                className="btn"
+                disabled={actionPending}
+                onClick={() => handleReadyToggle(true)}
+              >
+                {label("detail.convertToDraft", "ready:true")}
+              </button>
+              <button className="btn" disabled={actionPending} onClick={() => handleUpdateBranch()}>
+                {label("detail.updateBranch", "updateBranch")}
+              </button>
+            </div>
+            <div className="merge-box-row merge-box-actions">
+              <span className="review-controls">
+                <input
+                  type="text"
+                  className="review-body-input"
+                  placeholder={t("detail.reviewCommentPlaceholder")}
+                  value={reviewBody}
+                  onChange={(e) => setReviewBody(e.target.value)}
                   disabled={actionPending}
-                  onClick={() => setConfirmMerge(true)}
+                />
+                <button
+                  className="btn"
+                  disabled={actionPending}
+                  onClick={() => void handleReview("approve")}
                 >
-                  {t("detail.mergeButton")}
+                  {label("detail.approve", "review:approve")}
                 </button>
-              )}
-            </span>,
-          );
-          buttons.push(
-            <span className="review-controls" key="review">
-              <input
-                type="text"
-                className="review-body-input"
-                placeholder={t("detail.reviewCommentPlaceholder")}
-                value={reviewBody}
-                onChange={(e) => setReviewBody(e.target.value)}
-                disabled={actionPending}
-              />
-              <button
-                className="btn"
-                disabled={actionPending}
-                onClick={() => void handleReview("approve")}
-              >
-                {label("detail.approve", "review:approve")}
-              </button>
-              <button
-                className="btn"
-                disabled={actionPending || reviewBody.trim().length === 0}
-                title={reviewBody.trim().length === 0 ? t("detail.requestChangesTitle") : undefined}
-                onClick={() => void handleReview("requestChanges")}
-              >
-                {label("detail.requestChanges", "review:requestChanges")}
-              </button>
-              <button
-                className="btn"
-                disabled={actionPending}
-                onClick={() => void handleReview("comment")}
-              >
-                {label("detail.reviewComment", "review:comment")}
-              </button>
-            </span>,
-          );
-          buttons.push(
-            <button
-              key="ready-undo"
-              className="btn"
-              disabled={actionPending}
-              onClick={() => handleReadyToggle(true)}
-            >
-              {label("detail.convertToDraft", "ready:true")}
-            </button>,
-          );
-          buttons.push(
-            <button
-              key="update-branch"
-              className="btn"
-              disabled={actionPending}
-              onClick={() => handleUpdateBranch()}
-            >
-              {label("detail.updateBranch", "updateBranch")}
-            </button>,
-          );
-        }
-      } else if (detail.state === "CLOSED") {
-        buttons.push(
-          <button
-            key="reopen"
-            className="btn"
-            disabled={actionPending}
-            onClick={() => void handleReopen()}
-          >
-            {label("detail.reopen", "reopen")}
-          </button>,
-        );
-      }
-    }
-
-    if (buttons.length === 0) return null;
-    return <div className="action-bar">{buttons}</div>;
+                <button
+                  className="btn"
+                  disabled={actionPending || reviewBody.trim().length === 0}
+                  title={
+                    reviewBody.trim().length === 0 ? t("detail.requestChangesTitle") : undefined
+                  }
+                  onClick={() => void handleReview("requestChanges")}
+                >
+                  {label("detail.requestChanges", "review:requestChanges")}
+                </button>
+                <button
+                  className="btn"
+                  disabled={actionPending}
+                  onClick={() => void handleReview("comment")}
+                >
+                  {label("detail.reviewComment", "review:comment")}
+                </button>
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    );
   };
-
-  const actionBar = renderActionBar();
 
   // URL コピー/アプリで開く/ブラウザで開く。通常ヘッダーとスティッキーバーの両方に出す
   const urlActions = (
@@ -514,23 +534,17 @@ export function DetailPane({
   return (
     <div className="detail-pane">
       <div className="detail-scroll" ref={scrollRef} onScroll={handleScroll}>
-        <header className="detail-header">
+        <header className="detail-header" ref={propsRef}>
           <div className="detail-eyebrow">
             <span className="detail-repo">{detail.repo}</span>
-            <span className="detail-number">#{detail.number}</span>
             <span className="detail-eyebrow-spacer" />
             {urlActions}
           </div>
           <button className="detail-title-link" onClick={() => onOpenUrl(detail.url)}>
-            {detail.title}
+            {detail.title} <span className="detail-title-number">#{detail.number}</span>
           </button>
           <div className="detail-header-meta">
-            <StateBadge
-              kind={detail.kind}
-              state={detail.state}
-              isDraft={detail.isDraft}
-              size={14}
-            />
+            <StatePill kind={detail.kind} state={detail.state} isDraft={detail.isDraft} />
             {detail.authorAvatar && (
               <img src={detail.authorAvatar} className="avatar avatar-small" alt="" />
             )}
@@ -541,27 +555,38 @@ export function DetailPane({
                 updated: relativeTime(detail.updatedAt),
               })}
             </span>
-            {detail.milestone && <span className="milestone-chip">🎯 {detail.milestone}</span>}
+            {detail.kind === "pr" && (
+              <>
+                <span className="pr-branches">
+                  <code>{detail.baseRef}</code> ← <code>{detail.headRef}</code>
+                </span>
+                <span className="pr-diffstat">
+                  <span className="pr-additions">+{detail.additions}</span>{" "}
+                  <span className="pr-deletions">-{detail.deletions}</span>{" "}
+                  <span className="pr-changed-files">
+                    {t("detail.changedFiles", { n: detail.changedFiles })}
+                  </span>
+                </span>
+              </>
+            )}
           </div>
         </header>
 
-        {(actionBar || scrolled) && (
+        {scrolled && (
           <div className="detail-sticky">
-            {scrolled && (
-              <div className="detail-sticky-title">
-                <StateBadge
-                  kind={detail.kind}
-                  state={detail.state}
-                  isDraft={detail.isDraft}
-                  size={14}
-                />
-                <span className="detail-sticky-repo">
-                  {detail.repo}#{detail.number}
-                </span>
-                <span className="detail-sticky-title-text">{detail.title}</span>
-                <span className="detail-sticky-actions">{urlActions}</span>
-              </div>
-            )}
+            <div className="detail-sticky-title">
+              <StateBadge
+                kind={detail.kind}
+                state={detail.state}
+                isDraft={detail.isDraft}
+                size={14}
+              />
+              <span className="detail-sticky-repo">
+                {detail.repo}#{detail.number}
+              </span>
+              <span className="detail-sticky-title-text">{detail.title}</span>
+              <span className="detail-sticky-actions">{urlActions}</span>
+            </div>
             {propsGone && (
               <div className="detail-sticky-props">
                 {detail.kind === "pr" && (
@@ -601,338 +626,8 @@ export function DetailPane({
                 )}
               </div>
             )}
-            {actionBar}
           </div>
         )}
-
-        <div className="detail-props" ref={propsRef}>
-          {detail.kind === "pr" && (
-            <div className="prop-row">
-              <span className="prop-label">{t("detail.branch")}</span>
-              <div className="prop-value pr-info">
-                <span className="pr-branches">
-                  <code>{detail.baseRef}</code> ← <code>{detail.headRef}</code>
-                </span>
-                <span className="pr-diffstat">
-                  <span className="pr-additions">+{detail.additions}</span>{" "}
-                  <span className="pr-deletions">-{detail.deletions}</span>{" "}
-                  <span className="pr-changed-files">
-                    {t("detail.changedFiles", { n: detail.changedFiles })}
-                  </span>
-                </span>
-                {detail.mergeable && (
-                  <span
-                    className={`mergeable-badge${detail.mergeable === "CONFLICTING" ? " warn" : ""}`}
-                  >
-                    {mergeableLabel(t, detail.mergeable)}
-                  </span>
-                )}
-                {detail.reviewDecision && (
-                  <span
-                    className={`review-decision-badge rd-${detail.reviewDecision.toLowerCase()}`}
-                  >
-                    {reviewDecisionLabel(t, detail.reviewDecision)}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="prop-row">
-            <span className="prop-label">{t("detail.labels")}</span>
-            <div className="prop-value labels-row">
-              {detail.labels.map((l) => (
-                <span
-                  key={l.name}
-                  className="label-chip"
-                  style={{ background: `#${l.color}`, color: labelTextColor(l.color) }}
-                >
-                  {l.name}
-                </span>
-              ))}
-              <button className="label-edit-btn" onClick={() => void openLabelsEditor()}>
-                {t("common.edit")}
-              </button>
-              {labelsOpen && (
-                <div className="popover labels-popover">
-                  {labelsLoading && <p className="popover-loading">{t("common.loading")}</p>}
-                  {labelsError && <p className="popover-error">{labelsError}</p>}
-                  {!labelsLoading && repoLabelsList && (
-                    <>
-                      <div className="labels-popover-list">
-                        {repoLabelsList.map((l) => (
-                          <label key={l.name} className="labels-popover-item">
-                            <input
-                              type="checkbox"
-                              checked={checkedLabels.has(l.name)}
-                              onChange={() => toggleCheckedLabel(l.name)}
-                            />
-                            <span
-                              className="label-chip label-chip-small"
-                              style={{ background: `#${l.color}`, color: labelTextColor(l.color) }}
-                            >
-                              {l.name}
-                            </span>
-                          </label>
-                        ))}
-                        {repoLabelsList.length === 0 && (
-                          <p className="popover-empty">{t("detail.noLabels")}</p>
-                        )}
-                      </div>
-                      <div className="popover-actions">
-                        <button
-                          className="btn"
-                          onClick={() => setLabelsOpen(false)}
-                          disabled={actionPending}
-                        >
-                          {t("common.cancel")}
-                        </button>
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => void applyLabels()}
-                          disabled={actionPending}
-                        >
-                          {label("detail.applyLabels", "editLabels")}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="prop-row">
-            <span className="prop-label">{t("detail.assignees")}</span>
-            <div className="prop-value assignees-row">
-              {detail.assignees.length === 0 && (
-                <span className="fg-muted">{t("common.none")}</span>
-              )}
-              {detail.assignees.map((a) => (
-                <span key={a} className="assignee-chip">
-                  {a}
-                </span>
-              ))}
-              {viewer && (
-                <button
-                  className="btn btn-small"
-                  onClick={handleAssignToggle}
-                  disabled={actionPending}
-                >
-                  {isAssignedToMe
-                    ? label("detail.unassign", "assignMe")
-                    : label("detail.assignMe", "assignMe")}
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="prop-row">
-            <span className="prop-label">{t("detail.epics")}</span>
-            <div className="prop-value epics-row">
-              {epics.length === 0 && <span className="fg-muted">{t("detail.noEpicsHint")}</span>}
-              {epics
-                .filter((e) => itemEpicIds.includes(e.id))
-                .map((e) => (
-                  <span
-                    key={e.id}
-                    className="epic-chip"
-                    style={
-                      e.color ? { borderColor: `#${e.color}`, color: `#${e.color}` } : undefined
-                    }
-                  >
-                    {e.name}
-                    <button
-                      type="button"
-                      className="chip-remove"
-                      onClick={() => onRemoveFromEpic(e.id)}
-                      aria-label={t("detail.removeFromEpic", { name: e.name })}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              {epics.some((e) => !itemEpicIds.includes(e.id)) && (
-                <select
-                  className="epic-add-select"
-                  value=""
-                  onChange={(e) => {
-                    const id = Number(e.target.value);
-                    if (id) onAddToEpic(id);
-                  }}
-                >
-                  <option value="">{t("detail.addToEpic")}</option>
-                  {epics
-                    .filter((e) => !itemEpicIds.includes(e.id))
-                    .map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.name}
-                      </option>
-                    ))}
-                </select>
-              )}
-            </div>
-          </div>
-
-          {(detail.projects.length > 0 || detail.projectsScopeMissing) && (
-            <div className="prop-row">
-              <span className="prop-label">{t("detail.projects")}</span>
-              <div className="prop-value prop-value-stack">
-                {detail.projectsScopeMissing && (
-                  <span className="fg-muted">{t("detail.projectsScopeHint")}</span>
-                )}
-                {detail.projects.map((p) => {
-                  const fieldId = p.statusFieldId;
-                  return (
-                    <div key={p.itemId} className="project-row">
-                      <button
-                        className="project-link"
-                        title={p.url}
-                        onClick={() => onOpenUrl(p.url)}
-                      >
-                        {p.title}
-                      </button>
-                      {fieldId != null && p.statusOptions.length > 0 ? (
-                        <select
-                          className="epic-add-select"
-                          value={p.statusOptionId ?? ""}
-                          disabled={actionPending}
-                          onChange={(e) => {
-                            const optionId = e.target.value;
-                            if (optionId && optionId !== p.statusOptionId) {
-                              void onAction({
-                                type: "setProjectStatus",
-                                itemId: p.itemId,
-                                projectId: p.projectId,
-                                fieldId,
-                                optionId,
-                              });
-                            }
-                          }}
-                        >
-                          {p.statusOptionId == null && (
-                            <option value="">{t("detail.noStatus")}</option>
-                          )}
-                          {p.statusOptions.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        p.status && <span className="fg-muted">{p.status}</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {detail.related.length > 0 && (
-            <div className="prop-row">
-              <span className="prop-label">{t("detail.related")}</span>
-              <div className="prop-value related-list">
-                {detail.related.map((r) => (
-                  <button
-                    key={r.url}
-                    className="related-item"
-                    title={r.url}
-                    onClick={() => onSelectRelated(r)}
-                  >
-                    <StateBadge kind={r.kind} state={r.state} isDraft={r.isDraft} size={14} />
-                    <span className="related-ref">
-                      {r.repo !== detail.repo && r.repo}#{r.number}
-                    </span>
-                    <span className="related-title">{r.title}</span>
-                  </button>
-                ))}
-                {detail.relatedTotal > detail.related.length && (
-                  <span className="fg-muted">+{detail.relatedTotal - detail.related.length}</span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {detail.kind === "pr" && detail.checks.length > 0 && (
-            <div className="prop-row">
-              <span className="prop-label">{t("detail.checks")}</span>
-              <div className="prop-value prop-value-stack">
-                {detail.checks.map((c, i) => {
-                  const icon = checkIconInfo(c.status);
-                  return (
-                    <div
-                      key={`${c.name}-${i}`}
-                      className={`check-row${c.url ? " clickable" : ""}`}
-                      onClick={() => c.url && onOpenUrl(c.url)}
-                    >
-                      <span className={`check-icon ${icon.className}`}>{icon.char}</span>
-                      <span className="check-name">{c.name}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {detail.kind === "pr" &&
-            (detail.reviews.length > 0 ||
-              detail.reviewRequests.length > 0 ||
-              addableReviewers.length > 0) && (
-              <div className="prop-row">
-                <span className="prop-label">{t("detail.reviews")}</span>
-                <div className="prop-value prop-value-stack">
-                  {detail.reviews.map((r, i) => (
-                    <div key={`${r.author}-${i}`} className="review-row">
-                      <span className="review-author">{r.author ?? "unknown"}</span>
-                      <span className={`review-state-badge rs-${r.state.toLowerCase()}`}>
-                        {reviewStateLabel(t, r.state)}
-                      </span>
-                    </div>
-                  ))}
-                  {detail.reviewRequests.map((login) => (
-                    <div key={login} className="review-row">
-                      <span className="review-author">{login}</span>
-                      <span className="review-state-badge rs-requested">
-                        {t("detail.reviewRequested")}
-                      </span>
-                      <button
-                        type="button"
-                        className="chip-remove"
-                        disabled={actionPending}
-                        onClick={() =>
-                          void onAction({ type: "editReviewers", add: [], remove: [login] })
-                        }
-                        aria-label={t("detail.removeReviewer", { name: login })}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  {addableReviewers.length > 0 && (
-                    <select
-                      className="epic-add-select"
-                      value=""
-                      disabled={actionPending}
-                      onChange={(e) => {
-                        const login = e.target.value;
-                        if (login) {
-                          void onAction({ type: "editReviewers", add: [login], remove: [] });
-                        }
-                      }}
-                    >
-                      <option value="">{t("detail.addReviewer")}</option>
-                      {addableReviewers.map((login) => (
-                        <option key={login} value={login}>
-                          {login}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
-            )}
-        </div>
 
         {error && (
           <div className="error detail-error">
@@ -944,76 +639,403 @@ export function DetailPane({
         )}
         {loading && <div className="detail-loading-bar" />}
 
-        <section className="detail-body-section">
-          {detail.bodyHtml ? (
-            <div
-              className="md"
-              onClick={handleMdClick}
-              dangerouslySetInnerHTML={{ __html: detail.bodyHtml }}
-            />
-          ) : (
-            <p className="fg-muted">{t("detail.noBody")}</p>
-          )}
-        </section>
-
-        <section className="comments-section">
-          <h3 className="detail-section-title">
-            {t("detail.timeline")}
-            {detail.timelineTotal > 0 && ` (${detail.timelineTotal})`}
-          </h3>
-          {detail.timelineTotal > detail.timeline.length && (
-            <p className="comments-hint">
-              {t("detail.moreTimeline", { n: detail.timelineTotal - detail.timeline.length })}
-            </p>
-          )}
-          {detail.timeline.map((e, i) =>
-            e.kind === "comment" ? (
-              <article className="comment-card" key={i}>
-                <div className="comment-header">
-                  {e.authorAvatar && (
-                    <img src={e.authorAvatar} className="avatar avatar-small" alt="" />
-                  )}
-                  <span className="comment-author">{e.author ?? "unknown"}</span>
-                  <span className="comment-time">{relativeTime(e.createdAt)}</span>
-                </div>
-                <div
-                  className="md comment-body"
-                  onClick={handleMdClick}
-                  dangerouslySetInnerHTML={{ __html: e.bodyHtml }}
-                />
-              </article>
-            ) : (
-              <div key={i} className="commit-row" onClick={() => onOpenUrl(e.url)}>
-                {e.authorAvatar ? (
-                  <img src={e.authorAvatar} className="avatar avatar-small" alt="" />
-                ) : (
-                  <span className="avatar avatar-small avatar-placeholder" />
+        <div className="detail-columns">
+          <aside className="detail-sidebar">
+            <section className="sidebar-section sec-labels">
+              <h4 className="sidebar-section-title">{t("detail.labels")}</h4>
+              <div className="labels-row">
+                {detail.labels.map((l) => (
+                  <span
+                    key={l.name}
+                    className="label-chip"
+                    style={{ background: `#${l.color}`, color: labelTextColor(l.color) }}
+                  >
+                    {l.name}
+                  </span>
+                ))}
+                <button className="label-edit-btn" onClick={() => void openLabelsEditor()}>
+                  {t("common.edit")}
+                </button>
+                {labelsOpen && (
+                  <div className="popover labels-popover">
+                    {labelsLoading && <p className="popover-loading">{t("common.loading")}</p>}
+                    {labelsError && <p className="popover-error">{labelsError}</p>}
+                    {!labelsLoading && repoLabelsList && (
+                      <>
+                        <div className="labels-popover-list">
+                          {repoLabelsList.map((l) => (
+                            <label key={l.name} className="labels-popover-item">
+                              <input
+                                type="checkbox"
+                                checked={checkedLabels.has(l.name)}
+                                onChange={() => toggleCheckedLabel(l.name)}
+                              />
+                              <span
+                                className="label-chip label-chip-small"
+                                style={{
+                                  background: `#${l.color}`,
+                                  color: labelTextColor(l.color),
+                                }}
+                              >
+                                {l.name}
+                              </span>
+                            </label>
+                          ))}
+                          {repoLabelsList.length === 0 && (
+                            <p className="popover-empty">{t("detail.noLabels")}</p>
+                          )}
+                        </div>
+                        <div className="popover-actions">
+                          <button
+                            className="btn"
+                            onClick={() => setLabelsOpen(false)}
+                            disabled={actionPending}
+                          >
+                            {t("common.cancel")}
+                          </button>
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => void applyLabels()}
+                            disabled={actionPending}
+                          >
+                            {label("detail.applyLabels", "editLabels")}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
-                <span className="commit-message" title={e.message}>
-                  {e.message}
-                </span>
-                <span className="commit-author">{e.author ?? "unknown"}</span>
-                <code className="commit-oid">{e.shortOid}</code>
-                <span className="commit-time">{relativeTime(e.date)}</span>
               </div>
-            ),
-          )}
-        </section>
+            </section>
 
-        <div className="comment-composer">
-          <textarea
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            placeholder={t("detail.commentPlaceholder")}
-            disabled={actionPending}
-          />
-          <button
-            className="btn btn-primary"
-            disabled={actionPending || commentText.trim().length === 0}
-            onClick={() => void handleSubmitComment()}
-          >
-            {label("detail.send", "comment")}
-          </button>
+            <section className="sidebar-section sec-assignees">
+              <h4 className="sidebar-section-title">{t("detail.assignees")}</h4>
+              <div className="assignees-row">
+                {detail.assignees.length === 0 && (
+                  <span className="fg-muted">{t("common.none")}</span>
+                )}
+                {detail.assignees.map((a) => (
+                  <span key={a} className="assignee-chip">
+                    {a}
+                  </span>
+                ))}
+                {viewer && (
+                  <button
+                    className="btn btn-small"
+                    onClick={handleAssignToggle}
+                    disabled={actionPending}
+                  >
+                    {isAssignedToMe
+                      ? label("detail.unassign", "assignMe")
+                      : label("detail.assignMe", "assignMe")}
+                  </button>
+                )}
+              </div>
+            </section>
+
+            <section className="sidebar-section sec-epics">
+              <h4 className="sidebar-section-title">{t("detail.epics")}</h4>
+              <div className="epics-row">
+                {epics.length === 0 && <span className="fg-muted">{t("detail.noEpicsHint")}</span>}
+                {epics
+                  .filter((e) => itemEpicIds.includes(e.id))
+                  .map((e) => (
+                    <span
+                      key={e.id}
+                      className="epic-chip"
+                      style={
+                        e.color ? { borderColor: `#${e.color}`, color: `#${e.color}` } : undefined
+                      }
+                    >
+                      {e.name}
+                      <button
+                        type="button"
+                        className="chip-remove"
+                        onClick={() => onRemoveFromEpic(e.id)}
+                        aria-label={t("detail.removeFromEpic", { name: e.name })}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                {epics.some((e) => !itemEpicIds.includes(e.id)) && (
+                  <select
+                    className="epic-add-select"
+                    value=""
+                    onChange={(e) => {
+                      const id = Number(e.target.value);
+                      if (id) onAddToEpic(id);
+                    }}
+                  >
+                    <option value="">{t("detail.addToEpic")}</option>
+                    {epics
+                      .filter((e) => !itemEpicIds.includes(e.id))
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            </section>
+
+            {(detail.projects.length > 0 || detail.projectsScopeMissing) && (
+              <section className="sidebar-section sec-projects">
+                <h4 className="sidebar-section-title">{t("detail.projects")}</h4>
+                <div className="sidebar-stack">
+                  {detail.projectsScopeMissing && (
+                    <span className="fg-muted">{t("detail.projectsScopeHint")}</span>
+                  )}
+                  {detail.projects.map((p) => {
+                    const fieldId = p.statusFieldId;
+                    return (
+                      <div key={p.itemId} className="project-row">
+                        <button
+                          className="project-link"
+                          title={p.url}
+                          onClick={() => onOpenUrl(p.url)}
+                        >
+                          {p.title}
+                        </button>
+                        {fieldId != null && p.statusOptions.length > 0 ? (
+                          <select
+                            className="epic-add-select"
+                            value={p.statusOptionId ?? ""}
+                            disabled={actionPending}
+                            onChange={(e) => {
+                              const optionId = e.target.value;
+                              if (optionId && optionId !== p.statusOptionId) {
+                                void onAction({
+                                  type: "setProjectStatus",
+                                  itemId: p.itemId,
+                                  projectId: p.projectId,
+                                  fieldId,
+                                  optionId,
+                                });
+                              }
+                            }}
+                          >
+                            {p.statusOptionId == null && (
+                              <option value="">{t("detail.noStatus")}</option>
+                            )}
+                            {p.statusOptions.map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {o.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          p.status && <span className="fg-muted">{p.status}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {detail.related.length > 0 && (
+              <section className="sidebar-section sec-development">
+                <h4 className="sidebar-section-title">{t("detail.related")}</h4>
+                <div className="related-list">
+                  {detail.related.map((r) => (
+                    <button
+                      key={r.url}
+                      className="related-item"
+                      title={r.url}
+                      onClick={() => onSelectRelated(r)}
+                    >
+                      <StateBadge kind={r.kind} state={r.state} isDraft={r.isDraft} size={14} />
+                      <span className="related-ref">
+                        {r.repo !== detail.repo && r.repo}#{r.number}
+                      </span>
+                      <span className="related-title">{r.title}</span>
+                    </button>
+                  ))}
+                  {detail.relatedTotal > detail.related.length && (
+                    <span className="fg-muted">+{detail.relatedTotal - detail.related.length}</span>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {detail.kind === "pr" &&
+              (detail.reviews.length > 0 ||
+                detail.reviewRequests.length > 0 ||
+                addableReviewers.length > 0) && (
+                <section className="sidebar-section sec-reviewers">
+                  <h4 className="sidebar-section-title">{t("detail.reviews")}</h4>
+                  <div className="sidebar-stack">
+                    {detail.reviews.map((r, i) => (
+                      <div key={`${r.author}-${i}`} className="review-row">
+                        <span className="review-author">{r.author ?? "unknown"}</span>
+                        <span className={`review-state-badge rs-${r.state.toLowerCase()}`}>
+                          {reviewStateLabel(t, r.state)}
+                        </span>
+                      </div>
+                    ))}
+                    {detail.reviewRequests.map((login) => (
+                      <div key={login} className="review-row">
+                        <span className="review-author">{login}</span>
+                        <span className="review-state-badge rs-requested">
+                          {t("detail.reviewRequested")}
+                        </span>
+                        <button
+                          type="button"
+                          className="chip-remove"
+                          disabled={actionPending}
+                          onClick={() =>
+                            void onAction({ type: "editReviewers", add: [], remove: [login] })
+                          }
+                          aria-label={t("detail.removeReviewer", { name: login })}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {addableReviewers.length > 0 && (
+                      <select
+                        className="epic-add-select"
+                        value=""
+                        disabled={actionPending}
+                        onChange={(e) => {
+                          const login = e.target.value;
+                          if (login) {
+                            void onAction({ type: "editReviewers", add: [login], remove: [] });
+                          }
+                        }}
+                      >
+                        <option value="">{t("detail.addReviewer")}</option>
+                        {addableReviewers.map((login) => (
+                          <option key={login} value={login}>
+                            {login}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </section>
+              )}
+
+            {detail.milestone && (
+              <section className="sidebar-section sec-milestone">
+                <h4 className="sidebar-section-title">{t("detail.milestoneLabel")}</h4>
+                <span className="fg-muted">{detail.milestone}</span>
+              </section>
+            )}
+          </aside>
+
+          <div className="detail-main">
+            <section className="comments-section">
+              <article className="comment-card">
+                <div className="comment-header">
+                  {detail.authorAvatar && (
+                    <img src={detail.authorAvatar} className="avatar avatar-small" alt="" />
+                  )}
+                  <span className="comment-author">{detail.author ?? "unknown"}</span>
+                  <span className="comment-time">{relativeTime(detail.createdAt)}</span>
+                </div>
+                <div className="comment-body">
+                  {detail.bodyHtml ? (
+                    <div
+                      className="md"
+                      onClick={handleMdClick}
+                      dangerouslySetInnerHTML={{ __html: detail.bodyHtml }}
+                    />
+                  ) : (
+                    <p className="fg-muted">{t("detail.noBody")}</p>
+                  )}
+                </div>
+              </article>
+              {detail.timelineTotal > detail.timeline.length && (
+                <p className="comments-hint">
+                  {t("detail.moreTimeline", { n: detail.timelineTotal - detail.timeline.length })}
+                </p>
+              )}
+              {detail.timeline.map((e, i) =>
+                e.kind === "comment" ? (
+                  <article className="comment-card" key={i}>
+                    <div className="comment-header">
+                      {e.authorAvatar && (
+                        <img src={e.authorAvatar} className="avatar avatar-small" alt="" />
+                      )}
+                      <span className="comment-author">{e.author ?? "unknown"}</span>
+                      <span className="comment-time">{relativeTime(e.createdAt)}</span>
+                    </div>
+                    <div
+                      className="md comment-body"
+                      onClick={handleMdClick}
+                      dangerouslySetInnerHTML={{ __html: e.bodyHtml }}
+                    />
+                  </article>
+                ) : e.kind === "commit" ? (
+                  <div key={i} className="commit-row" onClick={() => onOpenUrl(e.url)}>
+                    {e.authorAvatar ? (
+                      <img src={e.authorAvatar} className="avatar avatar-small" alt="" />
+                    ) : (
+                      <span className="avatar avatar-small avatar-placeholder" />
+                    )}
+                    <span className="commit-message" title={e.message}>
+                      {e.message}
+                    </span>
+                    <span className="commit-author">{e.author ?? "unknown"}</span>
+                    <code className="commit-oid">{e.shortOid}</code>
+                    <span className="commit-time">{relativeTime(e.date)}</span>
+                  </div>
+                ) : (
+                  <button
+                    key={i}
+                    type="button"
+                    className="timeline-ref-row"
+                    title={e.url}
+                    onClick={() =>
+                      onSelectRelated({
+                        kind: "pr",
+                        number: e.number,
+                        title: e.title,
+                        url: e.url,
+                        state: e.state,
+                        isDraft: e.isDraft,
+                        repo: e.repo,
+                      })
+                    }
+                  >
+                    <StateBadge kind="pr" state={e.state} isDraft={e.isDraft} size={14} />
+                    <span className="related-ref">
+                      {e.repo !== detail.repo && e.repo}#{e.number}
+                    </span>
+                    <span className="related-title">{e.title}</span>
+                    <span className="timeline-ref-note">
+                      {t("detail.timelineLinkedPr", { actor: e.actor ?? "unknown" })}
+                    </span>
+                    <span className="commit-time">{relativeTime(e.createdAt)}</span>
+                  </button>
+                ),
+              )}
+            </section>
+
+            {renderMergeBox()}
+
+            <div className="comment-composer">
+              <textarea
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder={t("detail.commentPlaceholder")}
+                disabled={actionPending}
+              />
+              <div className="composer-actions">
+                {renderCloseReopen()}
+                <button
+                  className="btn btn-primary"
+                  disabled={actionPending || commentText.trim().length === 0}
+                  onClick={() => void handleSubmitComment()}
+                >
+                  {label("detail.send", "comment")}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
