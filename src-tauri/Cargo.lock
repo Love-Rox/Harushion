@@ -1600,7 +1600,7 @@ dependencies = [
 
 [[package]]
 name = "harushion"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "fix-path-env",
  "reqwest 0.12.28",
