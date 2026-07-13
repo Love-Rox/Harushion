@@ -343,16 +343,30 @@ impl Db {
         enabled: bool,
         color: Option<&str>,
     ) -> Result<(), String> {
-        let conn = self.lock();
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(db_err)?;
+        let old_query: String = tx
+            .query_row("SELECT query FROM streams WHERE id = ?1", params![id], |r| r.get(0))
+            .map_err(db_err)?;
+        let query_changed = old_query != query;
         // クエリが変わったら次の tick で即再取得されるよう last_polled_at をリセット
-        conn.execute(
+        tx.execute(
             "UPDATE streams SET name = ?2, query = ?3, folder = ?4, interval_sec = ?5, enabled = ?6,
                color = ?7,
-               last_polled_at = CASE WHEN query = ?3 THEN last_polled_at ELSE NULL END
+               last_polled_at = CASE WHEN ?8 THEN NULL ELSE last_polled_at END
              WHERE id = ?1",
-            params![id, name, query, folder, interval_sec.max(60), enabled, color],
+            params![id, name, query, folder, interval_sec.max(60), enabled, color, query_changed],
         )
         .map_err(db_err)?;
+        if query_changed {
+            // 旧クエリでマッチしたアイテムのリンクを全て外す。org: / author: 等
+            // ローカルで判定できない条件は prune では掃除できないため、ここで
+            // 張り直すしかない。アイテム本体と read_state は残すので、直後の
+            // 再ポーリングで再リンクされたアイテムは既読状態を保つ
+            tx.execute("DELETE FROM stream_items WHERE stream_id = ?1", params![id])
+                .map_err(db_err)?;
+        }
+        tx.commit().map_err(db_err)?;
         Ok(())
     }
 
@@ -1146,6 +1160,37 @@ mod tests {
 
         db.delete_stream(id).unwrap();
         assert!(db.get_stream(id).is_err());
+    }
+
+    #[test]
+    fn query_change_unlinks_previous_items() {
+        let db = test_db();
+        let id = db.create_stream("s", "involves:@me", None, 60, None).unwrap();
+        db.upsert_items(
+            id,
+            &[
+                item("https://github.com/o/r/issues/1", "2026-07-09T00:00:00Z"),
+                item("https://github.com/o/r/issues/2", "2026-07-09T00:00:00Z"),
+            ],
+        )
+        .unwrap();
+        db.mark_read("https://github.com/o/r/issues/1").unwrap();
+
+        // クエリ以外の変更ではリンクを維持する
+        db.update_stream(id, "s2", "involves:@me", Some("work"), 90, true, None).unwrap();
+        assert_eq!(db.list_items(id, false).unwrap().len(), 2);
+
+        // クエリ変更で旧アイテムのリンクを全解除(org:/author: 等はローカルで判定できない)
+        db.update_stream(id, "s2", "is:pr org:o author:bot", None, 60, true, None).unwrap();
+        assert!(db.list_items(id, false).unwrap().is_empty());
+        assert!(db.get_due_stream(id).unwrap().first_poll, "即再取得されるようリセットされる");
+
+        // 再ポーリングで再リンクされたアイテムは既読状態を保つ
+        db.upsert_items(id, &[item("https://github.com/o/r/issues/1", "2026-07-09T00:00:00Z")])
+            .unwrap();
+        let items = db.list_items(id, false).unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(items[0].is_read);
     }
 
     #[test]

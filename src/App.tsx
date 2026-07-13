@@ -509,8 +509,26 @@ function App() {
   };
 
   const handleUpdateStream = async (data: StreamUpdateInput) => {
+    const prevQuery = streams.find((s) => s.id === data.id)?.query;
     await invoke<Stream>("update_stream", data);
     await loadStreams();
+    // クエリ変更時はリンクが張り直される(旧クエリのアイテムが外れて空になる)ので、
+    // 15秒の tick を待たずに即再取得する
+    if (prevQuery !== undefined && prevQuery !== data.query) {
+      const isSelected = selectedStreamId === data.id;
+      if (isSelected) setPolling(true);
+      try {
+        await invoke<number>("poll_stream_now", { streamId: data.id });
+        await Promise.all([
+          loadStreams(),
+          isSelected ? loadItems(data.id, unreadOnly) : Promise.resolve(),
+        ]);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        if (isSelected) setPolling(false);
+      }
+    }
   };
 
   const handleDeleteStream = async (id: number) => {
