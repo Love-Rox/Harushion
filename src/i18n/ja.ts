@@ -59,6 +59,7 @@ export const ja = {
     unreadOnly: "未読のみ",
     markAllRead: "全て既読",
     assignedYou: "担当",
+    reviewRequestedYou: "レビュー依頼",
     addToEpic: "エピックへ追加",
     queryLabel: "クエリ",
     noStream: "ストリームがありません",
@@ -84,6 +85,9 @@ export const ja = {
     unassign: "アサイン解除",
     checks: "チェック",
     reviews: "レビュー",
+    reviewRequested: "リクエスト中",
+    addReviewer: "+ レビュワー…",
+    removeReviewer: "{name} へのレビュー依頼を解除",
     epics: "エピック",
     projects: "プロジェクト",
     projectsScopeHint:

@@ -191,6 +191,7 @@ export function ItemList({
           items.slice(0, renderCount).map((item) => {
             const selected = item.url === selectedItemUrl;
             const assignedToMe = viewer != null && item.assignees.includes(viewer.login);
+            const reviewRequestedMe = viewer != null && item.reviewRequests.includes(viewer.login);
             return (
               <div
                 key={item.url}
@@ -236,6 +237,9 @@ export function ItemList({
                   <span className="item-main">
                     <span className="item-title">{item.title}</span>
                     <span className="item-meta">
+                      {reviewRequestedMe && (
+                        <span className="review-req-badge">{t("list.reviewRequestedYou")}</span>
+                      )}
                       {assignedToMe && (
                         <span className="assigned-badge">{t("list.assignedYou")}</span>
                       )}

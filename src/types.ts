@@ -44,6 +44,7 @@ export type Item = {
   milestone: string | null;
   comments: number;
   assignees: string[];
+  reviewRequests: string[]; // レビュー依頼中の相手(PR のみ)。User は login、Team は "org/team-slug"
   relatedCount: number; // Development リンク + 相互参照メンションの概数(本文言及は含まない)
   epicIds: number[];
   isRead: boolean;
@@ -130,6 +131,7 @@ export type ItemDetail = {
   reviewDecision: string | null; // APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED | null
   checks: CheckInfo[];
   reviews: ReviewInfo[]; // latest review per reviewer
+  reviewRequests: string[]; // レビュー依頼中の相手。User/Bot は login、Team は "org/team-slug"
   timeline: TimelineEntry[]; // last 30-40 comments+commits, chronological
   timelineTotal: number;
   projects: ProjectItemInfo[]; // first 10 Project (v2) memberships
@@ -150,6 +152,7 @@ export type ItemAction =
   | { type: "ready"; undo: boolean } // undo=true → convert back to draft
   | { type: "updateBranch" }
   | { type: "editLabels"; add: string[]; remove: string[] }
+  | { type: "editReviewers"; add: string[]; remove: string[] }
   | { type: "assignMe"; remove: boolean }
   | {
       type: "setProjectStatus";

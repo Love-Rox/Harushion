@@ -149,6 +149,14 @@ async fn list_repo_labels(repo: String) -> Result<Vec<LabelInfo>, String> {
 }
 
 #[tauri::command]
+async fn list_reviewer_candidates(
+    state: State<'_, AppState>,
+    repo: String,
+) -> Result<Vec<String>, String> {
+    github::list_reviewer_candidates(&state, &repo).await
+}
+
+#[tauri::command]
 async fn open_in_app_browser(app: AppHandle, url: String) -> Result<(), String> {
     browser::open_github(&app, &url).await
 }
@@ -361,6 +369,7 @@ pub fn run() {
             get_item_detail,
             item_action,
             list_repo_labels,
+            list_reviewer_candidates,
             open_in_app_browser,
             list_graph_repos,
             add_graph_repo,

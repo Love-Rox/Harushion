@@ -76,6 +76,7 @@ function App() {
   const [actionPending, setActionPending] = useState(false);
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
   const [repoLabels, setRepoLabels] = useState<Record<string, LabelInfo[]>>({});
+  const [repoReviewers, setRepoReviewers] = useState<Record<string, string[]>>({});
   const [itemEpicIds, setItemEpicIds] = useState<number[]>([]);
 
   const [view, setView] = useState<View>({ type: "stream" });
@@ -337,6 +338,7 @@ function App() {
       milestone: null,
       comments: 0,
       assignees: [],
+      reviewRequests: [],
       relatedCount: 0,
       epicIds: [],
       isRead: true,
@@ -383,6 +385,17 @@ function App() {
       return result;
     },
     [repoLabels],
+  );
+
+  const loadReviewerCandidates = useCallback(
+    async (repo: string): Promise<string[]> => {
+      const cached = repoReviewers[repo];
+      if (cached) return cached;
+      const result = await invoke<string[]>("list_reviewer_candidates", { repo });
+      setRepoReviewers((prev) => ({ ...prev, [repo]: result }));
+      return result;
+    },
+    [repoReviewers],
   );
 
   const handleAction = async (action: ItemAction): Promise<boolean> => {
@@ -691,6 +704,7 @@ function App() {
     onCopyUrl: handleCopyUrl,
     onSelectRelated: handleSelectRelated,
     loadRepoLabels,
+    loadReviewerCandidates,
   };
 
   return (

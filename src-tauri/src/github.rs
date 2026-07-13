@@ -147,6 +147,7 @@ pub struct Item {
     pub comments: i64,
     pub milestone: Option<String>,
     pub assignees: Vec<String>,
+    pub review_requests: Vec<String>,
     pub related_count: i64,
 }
 
@@ -183,6 +184,17 @@ query($q: String!, $first: Int!, $after: String) {
         comments { totalCount }
         milestone { title }
         assignees(first: 10) { nodes { login } }
+        reviewRequests(first: 15) {
+          nodes {
+            requestedReviewer {
+              __typename
+              ... on User { login }
+              ... on Bot { login }
+              ... on Mannequin { login }
+              ... on Team { combinedSlug }
+            }
+          }
+        }
         timelineItems(itemTypes: [CROSS_REFERENCED_EVENT]) { totalCount }
         closingIssuesReferences { totalCount }
       }
@@ -192,6 +204,25 @@ query($q: String!, $first: Int!, $after: String) {
 "#;
 
 const SEARCH_PAGE_SIZE: u32 = 50;
+
+/// reviewRequests ノードからレビュー依頼中の相手を取り出す。
+/// User/Bot/Mannequin は login、Team は "org/team-slug"
+fn parse_review_requests(node: &Value) -> Vec<String> {
+    node["reviewRequests"]["nodes"]
+        .as_array()
+        .map(|ns| {
+            ns.iter()
+                .filter_map(|n| {
+                    let r = &n["requestedReviewer"];
+                    r["login"]
+                        .as_str()
+                        .or_else(|| r["combinedSlug"].as_str())
+                        .map(String::from)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
 /// 検索結果をカーソルでページングしながら最大 max_total 件まで取得する。
 pub async fn search_items(state: &AppState, query: &str, max_total: u32) -> Result<Vec<Item>, String> {
@@ -241,6 +272,7 @@ pub async fn search_items(state: &AppState, query: &str, max_total: u32) -> Resu
                     .as_array()
                     .map(|ns| ns.iter().filter_map(|n| n["login"].as_str().map(String::from)).collect())
                     .unwrap_or_default(),
+                review_requests: parse_review_requests(node),
                 related_count: node["timelineItems"]["totalCount"].as_i64().unwrap_or(0)
                     + node["closedByPullRequestsReferences"]["totalCount"].as_i64().unwrap_or(0)
                     + node["closingIssuesReferences"]["totalCount"].as_i64().unwrap_or(0),
@@ -414,6 +446,7 @@ pub struct ItemDetail {
     pub review_decision: Option<String>,
     pub checks: Vec<CheckInfo>,
     pub reviews: Vec<ReviewInfo>,
+    pub review_requests: Vec<String>,
     pub timeline: Vec<TimelineEntry>,
     pub timeline_total: i64,
     pub projects: Vec<ProjectItemInfo>,
@@ -481,6 +514,17 @@ query($url: URI!) {
         }
       }
       latestReviews(first: 15) { nodes { author { login } state } }
+      reviewRequests(first: 15) {
+        nodes {
+          requestedReviewer {
+            __typename
+            ... on User { login }
+            ... on Bot { login }
+            ... on Mannequin { login }
+            ... on Team { combinedSlug }
+          }
+        }
+      }
       timeline: timelineItems(last: 40, itemTypes: [ISSUE_COMMENT, PULL_REQUEST_COMMIT]) {
         totalCount
         nodes {
@@ -796,6 +840,34 @@ async fn fetch_project_items(
     Ok(Some(projects))
 }
 
+/// レビュワー追加 UI の候補 = リポジトリの assignable ユーザー(先頭100名)。
+/// Team はスコープが別途必要になるため候補には含めない
+pub async fn list_reviewer_candidates(state: &AppState, repo: &str) -> Result<Vec<String>, String> {
+    let (owner, name) = repo
+        .split_once('/')
+        .ok_or_else(|| format!("不正なリポジトリ名です: {repo}"))?;
+    let data = state
+        .graphql(
+            r#"
+query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    assignableUsers(first: 100) { nodes { login } }
+  }
+}
+"#,
+            json!({ "owner": owner, "name": name }),
+        )
+        .await?;
+    Ok(data["repository"]["assignableUsers"]["nodes"]
+        .as_array()
+        .map(|ns| {
+            ns.iter()
+                .filter_map(|n| n["login"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
 pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail, String> {
     let data = state.graphql(DETAIL_QUERY, json!({ "url": url })).await?;
     let node = &data["resource"];
@@ -844,6 +916,8 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
                 .collect()
         })
         .unwrap_or_default();
+
+    let review_requests = parse_review_requests(node);
 
     let (timeline, timeline_total) = parse_timeline(node);
 
@@ -917,6 +991,7 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
         review_decision: node["reviewDecision"].as_str().map(String::from),
         checks: parse_checks(node),
         reviews,
+        review_requests,
         timeline,
         timeline_total,
         projects,

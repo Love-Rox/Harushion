@@ -16,6 +16,7 @@ pub enum ItemAction {
     Ready { undo: bool },
     UpdateBranch,
     EditLabels { add: Vec<String>, remove: Vec<String> },
+    EditReviewers { add: Vec<String>, remove: Vec<String> },
     AssignMe { remove: bool },
     SetProjectStatus { item_id: String, project_id: String, field_id: String, option_id: String },
 }
@@ -116,6 +117,33 @@ pub fn build_invocation(url: &str, kind: &str, action: &ItemAction) -> Result<Gh
             }
             if !remove.is_empty() {
                 a.push("--remove-label".into());
+                a.push(remove.join(","));
+            }
+            a
+        }
+        ItemAction::EditReviewers { add, remove } => {
+            pr_only("レビュワーの変更")?;
+            if add.is_empty() && remove.is_empty() {
+                return Err("レビュワーの変更がありません".into());
+            }
+            // login はカンマ結合で渡すため、区切り文字やフラグに化ける値を拒否する
+            for login in add.iter().chain(remove.iter()) {
+                let valid = !login.is_empty()
+                    && !login.starts_with('-')
+                    && login
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '/' | '@'));
+                if !valid {
+                    return Err(format!("不正なレビュワー名です: {login}"));
+                }
+            }
+            let mut a = strs(&["pr", "edit", url]);
+            if !add.is_empty() {
+                a.push("--add-reviewer".into());
+                a.push(add.join(","));
+            }
+            if !remove.is_empty() {
+                a.push("--remove-reviewer".into());
                 a.push(remove.join(","));
             }
             a
@@ -283,6 +311,31 @@ mod tests {
     }
 
     #[test]
+    fn edit_reviewers_joins_with_comma() {
+        let inv = build_invocation(
+            PR_URL,
+            "pr",
+            &ItemAction::EditReviewers { add: vec!["monalisa".into(), "o/team-a".into()], remove: vec!["hubot".into()] },
+        )
+        .unwrap();
+        assert_eq!(
+            args(&inv),
+            ["pr", "edit", PR_URL, "--add-reviewer", "monalisa,o/team-a", "--remove-reviewer", "hubot"]
+        );
+
+        // Copilot は "@copilot" 指定
+        let inv = build_invocation(PR_URL, "pr", &ItemAction::EditReviewers { add: vec!["@copilot".into()], remove: vec![] }).unwrap();
+        assert_eq!(args(&inv), ["pr", "edit", PR_URL, "--add-reviewer", "@copilot"]);
+
+        // PR 限定・空変更・不正な login(フラグ/カンマ注入)は拒否
+        assert!(build_invocation(URL, "issue", &ItemAction::EditReviewers { add: vec!["monalisa".into()], remove: vec![] }).is_err());
+        assert!(build_invocation(PR_URL, "pr", &ItemAction::EditReviewers { add: vec![], remove: vec![] }).is_err());
+        assert!(build_invocation(PR_URL, "pr", &ItemAction::EditReviewers { add: vec!["--evil".into()], remove: vec![] }).is_err());
+        assert!(build_invocation(PR_URL, "pr", &ItemAction::EditReviewers { add: vec!["a,b".into()], remove: vec![] }).is_err());
+        assert!(build_invocation(PR_URL, "pr", &ItemAction::EditReviewers { add: vec!["".into()], remove: vec![] }).is_err());
+    }
+
+    #[test]
     fn assign_me_toggles_flag() {
         let inv = build_invocation(URL, "issue", &ItemAction::AssignMe { remove: false }).unwrap();
         assert_eq!(args(&inv), ["issue", "edit", URL, "--add-assignee", "@me"]);
@@ -433,6 +486,9 @@ mod tests {
         let a: ItemAction =
             serde_json::from_str(r#"{"type":"editLabels","add":["bug"],"remove":["wip"]}"#).unwrap();
         assert_eq!(a, ItemAction::EditLabels { add: vec!["bug".into()], remove: vec!["wip".into()] });
+        let a: ItemAction =
+            serde_json::from_str(r#"{"type":"editReviewers","add":["monalisa"],"remove":[]}"#).unwrap();
+        assert_eq!(a, ItemAction::EditReviewers { add: vec!["monalisa".into()], remove: vec![] });
         let a: ItemAction = serde_json::from_str(
             r#"{"type":"setProjectStatus","itemId":"PVTI_x","projectId":"PVT_x","fieldId":"PVTSSF_x","optionId":"o1"}"#,
         )

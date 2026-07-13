@@ -1270,6 +1270,11 @@ code {
   border-color: var(--closed);
 }
 
+.rs-requested {
+  color: #d4a72c;
+  border-color: #d4a72c;
+}
+
 .detail-body-section {
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -1855,6 +1860,18 @@ code {
   font-weight: 700;
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* 自分宛てのレビュー依頼。詳細ペインの「リクエスト中」バッジと同じ待機イエロー */
+.review-req-badge {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #d4a72c;
+  border: 1px solid color-mix(in srgb, #d4a72c 55%, transparent);
 }
 
 /* ---- リスト行のエピック表示/追加 ---- */

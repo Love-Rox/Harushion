@@ -39,6 +39,7 @@ pub struct StoredItem {
     pub comments: i64,
     pub milestone: Option<String>,
     pub assignees: Vec<String>,
+    pub review_requests: Vec<String>,
     pub related_count: i64,
     pub epic_ids: Vec<i64>,
     pub is_read: bool,
@@ -108,6 +109,7 @@ CREATE TABLE IF NOT EXISTS items (
   comments INTEGER NOT NULL DEFAULT 0,
   milestone TEXT,
   assignees TEXT NOT NULL DEFAULT '',
+  review_requests TEXT NOT NULL DEFAULT '',
   related_count INTEGER NOT NULL DEFAULT 0
 );
 
@@ -250,6 +252,10 @@ impl Db {
         let _ = conn.execute("ALTER TABLE streams ADD COLUMN color TEXT", []);
         let _ = conn.execute("ALTER TABLE items ADD COLUMN milestone TEXT", []);
         let _ = conn.execute("ALTER TABLE items ADD COLUMN assignees TEXT NOT NULL DEFAULT ''", []);
+        let _ = conn.execute(
+            "ALTER TABLE items ADD COLUMN review_requests TEXT NOT NULL DEFAULT ''",
+            [],
+        );
         let _ = conn.execute("ALTER TABLE epics ADD COLUMN archived INTEGER NOT NULL DEFAULT 0", []);
         let _ = conn.execute(
             "ALTER TABLE items ADD COLUMN related_count INTEGER NOT NULL DEFAULT 0",
@@ -369,7 +375,8 @@ impl Db {
         let sql = format!(
             "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
                     i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees,
-                    (SELECT GROUP_CONCAT(ei.epic_id) FROM epic_items ei WHERE ei.item_url = i.url), {IS_READ_EXPR}, i.related_count
+                    (SELECT GROUP_CONCAT(ei.epic_id) FROM epic_items ei WHERE ei.item_url = i.url), {IS_READ_EXPR}, i.related_count,
+                    i.review_requests
              FROM items i
              JOIN stream_items si ON si.item_url = i.url
              LEFT JOIN read_state r ON r.item_url = i.url
@@ -394,6 +401,7 @@ impl Db {
                     comments: row.get(10)?,
                     milestone: row.get(11)?,
                     assignees: split_assignees(row.get::<_, String>(12)?),
+                    review_requests: split_assignees(row.get::<_, String>(16)?),
                     related_count: row.get(15)?,
                     epic_ids: split_epic_ids(row.get::<_, Option<String>>(13)?),
                     is_read: row.get(14)?,
@@ -427,15 +435,16 @@ impl Db {
             tx.execute(
                 "INSERT INTO items (url, kind, number, title, state, is_draft, updated_at,
                                     author, author_avatar, repo, comments, milestone, assignees,
-                                    related_count)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                                    review_requests, related_count)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                  ON CONFLICT(url) DO UPDATE SET
                    kind = excluded.kind, number = excluded.number, title = excluded.title,
                    state = excluded.state, is_draft = excluded.is_draft,
                    updated_at = excluded.updated_at, author = excluded.author,
                    author_avatar = excluded.author_avatar, repo = excluded.repo,
                    comments = excluded.comments, milestone = excluded.milestone,
-                   assignees = excluded.assignees, related_count = excluded.related_count",
+                   assignees = excluded.assignees, review_requests = excluded.review_requests,
+                   related_count = excluded.related_count",
                 params![
                     item.url,
                     item.kind,
@@ -450,6 +459,7 @@ impl Db {
                     item.comments,
                     item.milestone,
                     item.assignees.join(","),
+                    item.review_requests.join(","),
                     item.related_count
                 ],
             )
@@ -800,7 +810,7 @@ impl Db {
             "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
                     i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees,
                     (SELECT GROUP_CONCAT(ei.epic_id) FROM epic_items ei WHERE ei.item_url = i.url), {IS_READ_EXPR},
-                    ei.position, i.related_count
+                    ei.position, i.related_count, i.review_requests
              FROM epic_items ei
              JOIN items i ON i.url = ei.item_url
              LEFT JOIN read_state r ON r.item_url = i.url
@@ -825,6 +835,7 @@ impl Db {
                         comments: row.get(10)?,
                         milestone: row.get(11)?,
                         assignees: split_assignees(row.get::<_, String>(12)?),
+                        review_requests: split_assignees(row.get::<_, String>(17)?),
                         related_count: row.get(16)?,
                         epic_ids: split_epic_ids(row.get::<_, Option<String>>(13)?),
                         is_read: row.get(14)?,
@@ -1079,6 +1090,7 @@ mod tests {
             comments: 0,
             milestone: None,
             assignees: Vec::new(),
+            review_requests: Vec::new(),
             related_count: 0,
         }
     }
@@ -1099,6 +1111,25 @@ mod tests {
         it.related_count = 3;
         db.upsert_items(sid, &[it]).unwrap();
         assert_eq!(db.list_items(sid, false).unwrap()[0].related_count, 3);
+    }
+
+    #[test]
+    fn persists_review_requests_through_upsert_and_list() {
+        let db = test_db();
+        let sid = db.create_stream("s", "is:open", None, 60, None).unwrap();
+        let mut it = item("https://github.com/o/r/pull/10", "2026-07-09T00:00:00Z");
+        it.review_requests = vec!["monalisa".into(), "o/team-a".into()];
+        db.upsert_items(sid, &[it]).unwrap();
+        assert_eq!(
+            db.list_items(sid, false).unwrap()[0].review_requests,
+            ["monalisa", "o/team-a"]
+        );
+
+        // 依頼が解消されたら空へ戻る(upsert で上書き)
+        let mut it = item("https://github.com/o/r/pull/10", "2026-07-09T01:00:00Z");
+        it.review_requests = Vec::new();
+        db.upsert_items(sid, &[it]).unwrap();
+        assert!(db.list_items(sid, false).unwrap()[0].review_requests.is_empty());
     }
 
     #[test]
@@ -1254,6 +1285,7 @@ mod tests {
             comments: 0,
             milestone: None,
             assignees: Vec::new(),
+            review_requests: Vec::new(),
             related_count: 0,
         }
     }
@@ -1389,6 +1421,7 @@ mod tests {
             comments: 0,
             milestone: milestone.map(String::from),
             assignees: Vec::new(),
+            review_requests: Vec::new(),
             related_count: 0,
         }
     }

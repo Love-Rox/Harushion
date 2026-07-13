@@ -34,6 +34,7 @@ type Props = {
   onCopyUrl: (url: string) => Promise<void>;
   onSelectRelated: (related: RelatedItem) => void;
   loadRepoLabels: (repo: string) => Promise<LabelInfo[]>;
+  loadReviewerCandidates: (repo: string) => Promise<string[]>;
 };
 
 function mergeableLabel(t: TFunction, mergeable: string): string {
@@ -111,6 +112,7 @@ export function DetailPane({
   onCopyUrl,
   onSelectRelated,
   loadRepoLabels,
+  loadReviewerCandidates,
 }: Props) {
   const { t } = useI18n();
   const [commentText, setCommentText] = useState("");
@@ -120,6 +122,7 @@ export function DetailPane({
   const [labelsError, setLabelsError] = useState<string | null>(null);
   const [repoLabelsList, setRepoLabelsList] = useState<LabelInfo[] | null>(null);
   const [checkedLabels, setCheckedLabels] = useState<Set<string>>(new Set());
+  const [reviewerCandidates, setReviewerCandidates] = useState<string[]>([]);
   const [confirmClose, setConfirmClose] = useState(false);
   const [confirmMerge, setConfirmMerge] = useState(false);
   const [mergeMethod, setMergeMethod] = useState<MergeMethod>("squash");
@@ -144,6 +147,23 @@ export function DetailPane({
     setScrolled(false);
     setPropsGone(false);
   }, [item?.url]);
+
+  // レビュワー追加ドロップダウンの候補。リポジトリ単位で親がキャッシュするので
+  // PR を開くたびの再取得にはならない。取得失敗は候補なし(追加 UI 非表示)に落とす
+  const detailRepo = detail?.kind === "pr" ? detail.repo : null;
+  useEffect(() => {
+    setReviewerCandidates([]);
+    if (!detailRepo) return;
+    let cancelled = false;
+    loadReviewerCandidates(detailRepo)
+      .then((list) => {
+        if (!cancelled) setReviewerCandidates(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [detailRepo, loadReviewerCandidates]);
 
   const handleScroll = (e: ReactUIEvent<HTMLDivElement>) => {
     setScrolled(e.currentTarget.scrollTop > 56);
@@ -192,6 +212,11 @@ export function DetailPane({
   }
 
   const isAssignedToMe = viewer != null && detail.assignees.includes(viewer.login);
+  // 作者と依頼済みの相手は追加候補から除く(作者へのレビュー依頼は GitHub が拒否する)
+  const requestedReviewers = new Set(detail.reviewRequests);
+  const addableReviewers = reviewerCandidates.filter(
+    (l) => l !== detail.author && !requestedReviewers.has(l),
+  );
   const isPending = (key: string) => actionPending && pendingActionKey === key;
   const label = (baseKey: MessagePath, key: string) => {
     const base = t(baseKey);
@@ -850,21 +875,63 @@ export function DetailPane({
             </div>
           )}
 
-          {detail.kind === "pr" && detail.reviews.length > 0 && (
-            <div className="prop-row">
-              <span className="prop-label">{t("detail.reviews")}</span>
-              <div className="prop-value prop-value-stack">
-                {detail.reviews.map((r, i) => (
-                  <div key={`${r.author}-${i}`} className="review-row">
-                    <span className="review-author">{r.author ?? "unknown"}</span>
-                    <span className={`review-state-badge rs-${r.state.toLowerCase()}`}>
-                      {reviewStateLabel(t, r.state)}
-                    </span>
-                  </div>
-                ))}
+          {detail.kind === "pr" &&
+            (detail.reviews.length > 0 ||
+              detail.reviewRequests.length > 0 ||
+              addableReviewers.length > 0) && (
+              <div className="prop-row">
+                <span className="prop-label">{t("detail.reviews")}</span>
+                <div className="prop-value prop-value-stack">
+                  {detail.reviews.map((r, i) => (
+                    <div key={`${r.author}-${i}`} className="review-row">
+                      <span className="review-author">{r.author ?? "unknown"}</span>
+                      <span className={`review-state-badge rs-${r.state.toLowerCase()}`}>
+                        {reviewStateLabel(t, r.state)}
+                      </span>
+                    </div>
+                  ))}
+                  {detail.reviewRequests.map((login) => (
+                    <div key={login} className="review-row">
+                      <span className="review-author">{login}</span>
+                      <span className="review-state-badge rs-requested">
+                        {t("detail.reviewRequested")}
+                      </span>
+                      <button
+                        type="button"
+                        className="chip-remove"
+                        disabled={actionPending}
+                        onClick={() =>
+                          void onAction({ type: "editReviewers", add: [], remove: [login] })
+                        }
+                        aria-label={t("detail.removeReviewer", { name: login })}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {addableReviewers.length > 0 && (
+                    <select
+                      className="epic-add-select"
+                      value=""
+                      disabled={actionPending}
+                      onChange={(e) => {
+                        const login = e.target.value;
+                        if (login) {
+                          void onAction({ type: "editReviewers", add: [login], remove: [] });
+                        }
+                      }}
+                    >
+                      <option value="">{t("detail.addReviewer")}</option>
+                      {addableReviewers.map((login) => (
+                        <option key={login} value={login}>
+                          {login}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
 
         {error && (
