@@ -1,6 +1,6 @@
 [package]
 name = "harushion"
-version = "0.1.8"
+version = "0.1.9"
 description = "GitHub issue/PR watcher built with Tauri"
 authors = ["sasagar"]
 license = "MIT"
