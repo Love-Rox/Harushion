@@ -19,6 +19,8 @@ import type {
 } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { SettingsModal } from "./components/SettingsModal";
+import { getBadgeMode, setBadgeMode } from "./badge";
+import type { BadgeMode } from "./badge";
 import { StreamModal } from "./components/StreamModal";
 import type {
   StreamCreateInput,
@@ -64,6 +66,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [badgeMode, setBadgeModeState] = useState<BadgeMode>(() => getBadgeMode());
   const [modalOpen, setModalOpen] = useState(false);
   const [editingStream, setEditingStream] = useState<Stream | null>(null);
   const [folderColors, setFolderColors] = useState<Record<string, string>>({});
@@ -101,6 +104,18 @@ function App() {
   useEffect(() => {
     unreadOnlyRef.current = unreadOnly;
   }, [unreadOnly]);
+
+  // Stream の未読合計を Dock/タスクバーのバッジへ反映(streams は既読操作・ポーリングの
+  // たびに再取得されるので、これで常に追従する)
+  useEffect(() => {
+    const total = streams.reduce((acc, s) => acc + s.unreadCount, 0);
+    invoke<void>("set_app_badge", { mode: badgeMode, count: total }).catch(() => {});
+  }, [streams, badgeMode]);
+
+  const handleBadgeModeChange = (mode: BadgeMode) => {
+    setBadgeMode(mode);
+    setBadgeModeState(mode);
+  };
 
   const loadStreams = useCallback(async (): Promise<Stream[]> => {
     const result = await invoke<Stream[]>("list_streams");
@@ -846,7 +861,13 @@ function App() {
           />
         )}
       </div>
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsModal
+          badgeMode={badgeMode}
+          onBadgeModeChange={handleBadgeModeChange}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
       {modalOpen && (
         <StreamModal
           stream={editingStream}

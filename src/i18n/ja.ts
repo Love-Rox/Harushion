@@ -3,6 +3,10 @@
 export const ja = {
   settings: {
     title: "設定",
+    badgeLabel: "未読バッジ(アプリアイコン)",
+    badgeCount: "未読件数を表示",
+    badgeDot: "未読があることを表示",
+    badgeNone: "表示しない",
   },
   common: {
     add: "追加",

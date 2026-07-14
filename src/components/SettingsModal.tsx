@@ -3,12 +3,15 @@ import { useI18n } from "../i18n";
 import type { Locale } from "../i18n";
 import { getThemePreference, setThemePreference } from "../theme";
 import type { ThemePreference } from "../theme";
+import type { BadgeMode } from "../badge";
 
 type Props = {
+  badgeMode: BadgeMode;
+  onBadgeModeChange: (mode: BadgeMode) => void;
   onClose: () => void;
 };
 
-export function SettingsModal({ onClose }: Props) {
+export function SettingsModal({ badgeMode, onBadgeModeChange, onClose }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [theme, setTheme] = useState<ThemePreference>(getThemePreference());
   const overlayMouseDownRef = useRef(false);
@@ -47,6 +50,18 @@ export function SettingsModal({ onClose }: Props) {
             <option value="system">{t("sidebar.themeSystem")}</option>
             <option value="light">{t("sidebar.themeLight")}</option>
             <option value="dark">{t("sidebar.themeDark")}</option>
+          </select>
+        </label>
+
+        <label className="field">
+          <span className="field-label">{t("settings.badgeLabel")}</span>
+          <select
+            value={badgeMode}
+            onChange={(e) => onBadgeModeChange(e.target.value as BadgeMode)}
+          >
+            <option value="count">{t("settings.badgeCount")}</option>
+            <option value="dot">{t("settings.badgeDot")}</option>
+            <option value="none">{t("settings.badgeNone")}</option>
           </select>
         </label>
 

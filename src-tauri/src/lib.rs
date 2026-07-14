@@ -161,6 +161,29 @@ async fn open_in_app_browser(app: AppHandle, url: String) -> Result<(), String> 
     browser::open_github(&app, &url).await
 }
 
+/// アプリアイコン(Dock/タスクバー)の未読バッジ。mode: "count"=件数 / "dot"=未読ありマーク / "none"=非表示。
+/// macOS のドットは badge_label("●")。Linux(Unity 系)は件数のみ対応なのでドットは件数で代用。
+/// Windows は set_badge_count 非対応のため実質何も表示されない(失敗は UI を壊さずログのみ)。
+#[tauri::command]
+fn set_app_badge(window: tauri::WebviewWindow, mode: String, count: i64) -> Result<(), String> {
+    let show = count > 0;
+    let result = match (mode.as_str(), show) {
+        ("count", true) => window.set_badge_count(Some(count)),
+        #[cfg(target_os = "macos")]
+        ("dot", true) => window.set_badge_label(Some("●".into())),
+        #[cfg(not(target_os = "macos"))]
+        ("dot", true) => window.set_badge_count(Some(count)),
+        #[cfg(target_os = "macos")]
+        _ => window.set_badge_label(None),
+        #[cfg(not(target_os = "macos"))]
+        _ => window.set_badge_count(None),
+    };
+    if let Err(e) = result {
+        eprintln!("バッジの設定に失敗: {e}");
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn check_for_update(state: State<'_, AppState>) -> Result<Option<updater::UpdateInfo>, String> {
     updater::check_update(&state).await
@@ -371,6 +394,7 @@ pub fn run() {
             list_repo_labels,
             list_reviewer_candidates,
             open_in_app_browser,
+            set_app_badge,
             list_graph_repos,
             add_graph_repo,
             remove_graph_repo,

@@ -5,6 +5,10 @@ import type { Messages } from "./ja";
 export const en: Messages = {
   settings: {
     title: "Settings",
+    badgeLabel: "Unread badge (app icon)",
+    badgeCount: "Show unread count",
+    badgeDot: "Show a dot",
+    badgeNone: "Off",
   },
   common: {
     add: "Add",
