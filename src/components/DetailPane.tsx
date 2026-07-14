@@ -758,7 +758,7 @@ export function DetailPane({
                       </button>
                     </span>
                   ))}
-                {epics.some((e) => !itemEpicIds.includes(e.id)) && (
+                {epics.some((e) => !itemEpicIds.includes(e.id) && !e.archived) && (
                   <select
                     className="epic-add-select"
                     value=""
@@ -769,7 +769,7 @@ export function DetailPane({
                   >
                     <option value="">{t("detail.addToEpic")}</option>
                     {epics
-                      .filter((e) => !itemEpicIds.includes(e.id))
+                      .filter((e) => !itemEpicIds.includes(e.id) && !e.archived)
                       .map((e) => (
                         <option key={e.id} value={e.id}>
                           {e.name}

@@ -59,10 +59,13 @@ export function ItemList({
 
   /** 行の右クリックで OS ネイティブメニューを表示する(エピック所属・既読切替・コピー・ブラウザ) */
   const showItemContextMenu = async (item: Item) => {
+    // アーカイブ済みエピックは「新規追加」させない。ただし既に所属していれば
+    // 外せるよう残す(チェックを外す=削除)
+    const menuEpics = epics.filter((e) => !e.archived || item.epicIds.includes(e.id));
     const epicItems =
-      epics.length > 0
+      menuEpics.length > 0
         ? await Promise.all(
-            epics.map((epic) => {
+            menuEpics.map((epic) => {
               const isMember = item.epicIds.includes(epic.id);
               return CheckMenuItem.new({
                 text: epic.name,

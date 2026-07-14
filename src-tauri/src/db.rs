@@ -871,6 +871,14 @@ impl Db {
         if exists == 0 {
             return Err("このアイテムはまだ取り込まれていません".into());
         }
+        // アーカイブ済みエピックは完了済みの束なので、新規追加を受け付けない
+        // (UI でも選択肢から隠すが、経路によらず弾く)
+        let archived: bool = conn
+            .query_row("SELECT archived FROM epics WHERE id = ?1", params![epic_id], |r| r.get(0))
+            .map_err(db_err)?;
+        if archived {
+            return Err("アーカイブ済みのエピックには追加できません".into());
+        }
         conn.execute(
             "INSERT OR IGNORE INTO epic_items (epic_id, item_url, position)
              VALUES (?1, ?2, (SELECT COALESCE(MAX(position) + 1, 0) FROM epic_items WHERE epic_id = ?1))",
@@ -1491,6 +1499,28 @@ mod tests {
         assert!(db.get_epic(eid).is_err());
         // Stream には残っているのでアイテムは消えない
         assert_eq!(db.list_items(sid, false).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn archived_epic_rejects_new_items_but_keeps_existing() {
+        let db = test_db();
+        let sid = db.create_stream("s", "q", None, 60, None).unwrap();
+        db.upsert_items(sid, &[pr_item("u1", "OPEN", false, "o/r"), pr_item("u2", "OPEN", false, "o/r")])
+            .unwrap();
+        let eid = db.create_epic("v1", None, None).unwrap();
+        db.add_epic_item(eid, "u1").unwrap();
+
+        db.set_epic_archived(eid, true).unwrap();
+        assert!(db.add_epic_item(eid, "u2").is_err(), "アーカイブ済みには追加できない");
+        // 既存メンバーは残り、削除もできる
+        assert_eq!(db.list_epic_items(eid).unwrap().len(), 1);
+        db.remove_epic_item(eid, "u1").unwrap();
+        assert!(db.list_epic_items(eid).unwrap().is_empty());
+
+        // アーカイブを解除すれば再び追加できる
+        db.set_epic_archived(eid, false).unwrap();
+        db.add_epic_item(eid, "u2").unwrap();
+        assert_eq!(db.list_epic_items(eid).unwrap().len(), 1);
     }
 
     #[test]
