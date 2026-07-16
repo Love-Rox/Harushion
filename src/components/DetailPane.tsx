@@ -231,6 +231,8 @@ export function DetailPane({
   }
 
   const isAssignedToMe = viewer != null && detail.assignees.includes(viewer.login);
+  // closed/merged PR へのレビュー依頼変更は GitHub が拒否するため、操作系は OPEN 限定
+  const isOpen = detail.state === "OPEN";
   // 作者と依頼済みの相手は追加候補から除く(作者へのレビュー依頼は GitHub が拒否する)
   const requestedReviewers = new Set(detail.reviewRequests);
   const addableReviewers = reviewerCandidates.filter(
@@ -598,7 +600,7 @@ export function DetailPane({
                       <span className="pr-additions">+{detail.additions}</span>{" "}
                       <span className="pr-deletions">-{detail.deletions}</span>
                     </span>
-                    {detail.mergeable === "CONFLICTING" && (
+                    {isOpen && detail.mergeable === "CONFLICTING" && (
                       <span className="mergeable-badge warn">
                         {mergeableLabel(t, detail.mergeable)}
                       </span>
@@ -863,7 +865,7 @@ export function DetailPane({
             {detail.kind === "pr" &&
               (detail.reviews.length > 0 ||
                 detail.reviewRequests.length > 0 ||
-                addableReviewers.length > 0) && (
+                (isOpen && addableReviewers.length > 0)) && (
                 <section className="sidebar-section sec-reviewers">
                   <h4 className="sidebar-section-title">{t("detail.reviews")}</h4>
                   <div className="sidebar-stack">
@@ -881,20 +883,22 @@ export function DetailPane({
                         <span className="review-state-badge rs-requested">
                           {t("detail.reviewRequested")}
                         </span>
-                        <button
-                          type="button"
-                          className="chip-remove"
-                          disabled={actionPending}
-                          onClick={() =>
-                            void onAction({ type: "editReviewers", add: [], remove: [login] })
-                          }
-                          aria-label={t("detail.removeReviewer", { name: login })}
-                        >
-                          ×
-                        </button>
+                        {isOpen && (
+                          <button
+                            type="button"
+                            className="chip-remove"
+                            disabled={actionPending}
+                            onClick={() =>
+                              void onAction({ type: "editReviewers", add: [], remove: [login] })
+                            }
+                            aria-label={t("detail.removeReviewer", { name: login })}
+                          >
+                            ×
+                          </button>
+                        )}
                       </div>
                     ))}
-                    {addableReviewers.length > 0 && (
+                    {isOpen && addableReviewers.length > 0 && (
                       <select
                         className="epic-add-select"
                         value=""
