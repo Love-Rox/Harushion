@@ -128,9 +128,10 @@ function App() {
     setItemsLoading(true);
     try {
       const result = await invoke<Item[]>("list_items", { streamId, unreadOnly: unread });
-      setItems(result);
+      // 取得中に別 Stream へ切り替わっていたら反映しない(古い一覧で上書きしない)
+      if (selectedStreamIdRef.current === streamId) setItems(result);
     } catch (e) {
-      setError(String(e));
+      if (selectedStreamIdRef.current === streamId) setError(String(e));
     } finally {
       setItemsLoading(false);
     }
