@@ -126,13 +126,14 @@ pub fn build_invocation(url: &str, kind: &str, action: &ItemAction) -> Result<Gh
             if add.is_empty() && remove.is_empty() {
                 return Err("レビュワーの変更がありません".into());
             }
-            // login はカンマ結合で渡すため、区切り文字やフラグに化ける値を拒否する
+            // login はカンマ結合で渡すため、区切り文字やフラグに化ける値を拒否する。
+            // [ ] は Bot の login("dependabot[bot]" 等)の削除に必要なので許可
             for login in add.iter().chain(remove.iter()) {
                 let valid = !login.is_empty()
                     && !login.starts_with('-')
                     && login
                         .chars()
-                        .all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '/' | '@'));
+                        .all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '/' | '@' | '[' | ']'));
                 if !valid {
                     return Err(format!("不正なレビュワー名です: {login}"));
                 }
@@ -326,6 +327,10 @@ mod tests {
         // Copilot は "@copilot" 指定
         let inv = build_invocation(PR_URL, "pr", &ItemAction::EditReviewers { add: vec!["@copilot".into()], remove: vec![] }).unwrap();
         assert_eq!(args(&inv), ["pr", "edit", PR_URL, "--add-reviewer", "@copilot"]);
+
+        // Bot の login は "[bot]" サフィックス付きで依頼一覧から削除経路に来る
+        let inv = build_invocation(PR_URL, "pr", &ItemAction::EditReviewers { add: vec![], remove: vec!["dependabot[bot]".into()] }).unwrap();
+        assert_eq!(args(&inv), ["pr", "edit", PR_URL, "--remove-reviewer", "dependabot[bot]"]);
 
         // PR 限定・空変更・不正な login(フラグ/カンマ注入)は拒否
         assert!(build_invocation(URL, "issue", &ItemAction::EditReviewers { add: vec!["monalisa".into()], remove: vec![] }).is_err());
