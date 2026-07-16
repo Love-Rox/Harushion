@@ -489,6 +489,8 @@ query($url: URI!) {
       timelineItems(last: 20, itemTypes: [CROSS_REFERENCED_EVENT]) {
         nodes {
           ... on CrossReferencedEvent {
+            createdAt
+            actor { login }
             source {
               __typename
               ... on Issue { number title url state repository { nameWithOwner } }
@@ -497,19 +499,11 @@ query($url: URI!) {
           }
         }
       }
-      timeline: timelineItems(last: 30, itemTypes: [ISSUE_COMMENT, CROSS_REFERENCED_EVENT]) {
+      timeline: timelineItems(last: 30, itemTypes: [ISSUE_COMMENT]) {
         totalCount
         nodes {
           __typename
           ... on IssueComment { author { login avatarUrl } bodyHTML createdAt }
-          ... on CrossReferencedEvent {
-            createdAt
-            actor { login }
-            source {
-              __typename
-              ... on PullRequest { number title url state isDraft repository { nameWithOwner } }
-            }
-          }
         }
       }
     }
@@ -582,7 +576,7 @@ query($url: URI!) {
 }
 "#;
 
-/// コメント+コミット(PR のみ)+紐づいた PR(Issue のみ)の統合タイムライン。
+/// コメント+コミット(PR のみ)の統合タイムライン。
 /// timelineItems は last:N の時系列順で返るので、そのまま古い→新しい順で表示できる
 fn parse_timeline(node: &Value) -> (Vec<TimelineEntry>, i64) {
     let total = node["timeline"]["totalCount"].as_i64().unwrap_or(0);
@@ -598,27 +592,6 @@ fn parse_timeline(node: &Value) -> (Vec<TimelineEntry>, i64) {
                         body_html: n["bodyHTML"].as_str()?.to_string(),
                         created_at: n["createdAt"].as_str().unwrap_or_default().to_string(),
                     })),
-                    // Issue へのクロスリファレンスのうち PR 起点のもの(=紐づいた PR)。
-                    // Issue 起点の言及はノイズになりやすいので「関連」行に任せる
-                    "CrossReferencedEvent" => {
-                        let s = &n["source"];
-                        if s["__typename"].as_str()? != "PullRequest" {
-                            return None;
-                        }
-                        Some(TimelineEntry::LinkedPr(LinkedPrInfo {
-                            number: s["number"].as_i64()?,
-                            title: s["title"].as_str().unwrap_or_default().to_string(),
-                            url: s["url"].as_str()?.to_string(),
-                            state: s["state"].as_str().unwrap_or_default().to_string(),
-                            is_draft: s["isDraft"].as_bool().unwrap_or(false),
-                            repo: s["repository"]["nameWithOwner"]
-                                .as_str()
-                                .unwrap_or_default()
-                                .to_string(),
-                            actor: n["actor"]["login"].as_str().map(String::from),
-                            created_at: n["createdAt"].as_str().unwrap_or_default().to_string(),
-                        }))
-                    }
                     "PullRequestCommit" => {
                         let c = &n["commit"];
                         Some(TimelineEntry::Commit(CommitInfo {
@@ -639,6 +612,56 @@ fn parse_timeline(node: &Value) -> (Vec<TimelineEntry>, i64) {
         })
         .unwrap_or_default();
     (entries, total)
+}
+
+/// Issue のタイムライン。コメント専用の timeline に、相互参照クエリから拾った
+/// 「紐づいた PR」(PR 起点の言及)を時系列で合流させる。
+/// timeline 側に CROSS_REFERENCED_EVENT を含めると、Issue 起点の言及ノイズが
+/// last:30 の取得枠と totalCount を消費し、「他{n}件」の表示が実際に見える件数と
+/// 食い違うため分離している。total には合流させた LinkedPr の件数を足し、
+/// 差分がそのまま「隠れている古いコメント数」になるようにする
+fn parse_issue_timeline(node: &Value) -> (Vec<TimelineEntry>, i64) {
+    let (mut entries, mut total) = parse_timeline(node);
+    let linked: Vec<TimelineEntry> = node["timelineItems"]["nodes"]
+        .as_array()
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|n| {
+                    let s = &n["source"];
+                    if s["__typename"].as_str()? != "PullRequest" {
+                        return None;
+                    }
+                    Some(TimelineEntry::LinkedPr(LinkedPrInfo {
+                        number: s["number"].as_i64()?,
+                        title: s["title"].as_str().unwrap_or_default().to_string(),
+                        url: s["url"].as_str()?.to_string(),
+                        state: s["state"].as_str().unwrap_or_default().to_string(),
+                        is_draft: s["isDraft"].as_bool().unwrap_or(false),
+                        repo: s["repository"]["nameWithOwner"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string(),
+                        actor: n["actor"]["login"].as_str().map(String::from),
+                        created_at: n["createdAt"].as_str().unwrap_or_default().to_string(),
+                    }))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    total += linked.len() as i64;
+    entries.extend(linked);
+    // ISO 8601 (UTC) は文字列比較で時系列になる。sort_by は安定なので同時刻は元の順
+    entries.sort_by(|a, b| entry_created_at(a).cmp(entry_created_at(b)));
+    (entries, total)
+}
+
+fn entry_created_at(e: &TimelineEntry) -> &str {
+    match e {
+        TimelineEntry::Comment(c) => &c.created_at,
+        TimelineEntry::Commit(c) => &c.date,
+        TimelineEntry::LinkedPr(l) => &l.created_at,
+    }
 }
 
 fn parse_checks(node: &Value) -> Vec<CheckInfo> {
@@ -964,7 +987,8 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
 
     let review_requests = parse_review_requests(node);
 
-    let (timeline, timeline_total) = parse_timeline(node);
+    let (timeline, timeline_total) =
+        if kind == "issue" { parse_issue_timeline(node) } else { parse_timeline(node) };
 
     // 関連 = Development リンク + 本文で言及した相手 + 自分に言及した相手(URL で重複排除)。
     // 本文言及の解決失敗で詳細表示全体を壊さないよう、そこだけベストエフォート
@@ -1118,6 +1142,46 @@ mod tests {
     }
 
     #[test]
+    fn issue_timeline_merges_linked_prs_and_total_counts_only_shown_kinds() {
+        let node = json!({
+            "timeline": {
+                // コメントは 12 件中、取得枠に入ったのが 2 件(=隠れた古いコメントは 10 件)
+                "totalCount": 12,
+                "nodes": [
+                    { "__typename": "IssueComment", "author": { "login": "a", "avatarUrl": "av" },
+                      "bodyHTML": "<p>old</p>", "createdAt": "2026-07-01T00:00:00Z" },
+                    { "__typename": "IssueComment", "author": { "login": "b", "avatarUrl": "av" },
+                      "bodyHTML": "<p>new</p>", "createdAt": "2026-07-03T00:00:00Z" }
+                ]
+            },
+            "timelineItems": {
+                "nodes": [
+                    // Issue 起点の言及はタイムラインに出さない(「関連」行に任せる)
+                    { "createdAt": "2026-07-02T00:00:00Z", "actor": { "login": "noise" },
+                      "source": { "__typename": "Issue", "number": 9, "title": "n", "url": "u9",
+                                   "state": "OPEN", "repository": { "nameWithOwner": "o/r" } } },
+                    { "createdAt": "2026-07-02T00:00:00Z", "actor": { "login": "c" },
+                      "source": { "__typename": "PullRequest", "number": 5, "title": "fix", "url": "u5",
+                                   "state": "OPEN", "isDraft": false,
+                                   "repository": { "nameWithOwner": "o/r" } } }
+                ]
+            }
+        });
+
+        let (entries, total) = parse_issue_timeline(&node);
+        // コメント 2 件 + PR 起点の言及 1 件が時系列順に並ぶ
+        assert_eq!(entries.len(), 3);
+        assert!(matches!(&entries[0], TimelineEntry::Comment(c) if c.body_html == "<p>old</p>"));
+        assert!(
+            matches!(&entries[1], TimelineEntry::LinkedPr(l) if l.number == 5 && l.actor.as_deref() == Some("c"))
+        );
+        assert!(matches!(&entries[2], TimelineEntry::Comment(c) if c.body_html == "<p>new</p>"));
+        // total は「コメント総数 + 表示した LinkedPr 数」。差分 10 が隠れた古いコメント数になる
+        assert_eq!(total, 13);
+        assert_eq!(total - entries.len() as i64, 10);
+    }
+
+    #[test]
     fn extracts_mentioned_item_urls_from_body_html() {
         let body = r##"<p>
             <a href="https://github.com/o/r/issues/12">#12</a>
@@ -1161,6 +1225,14 @@ mod tests {
             issue.related.iter().map(|r| r.number).collect::<Vec<_>>()
         );
         assert!(issue.related_total >= 1);
+        // 紐づいた PR は(コメント専用になった timeline とは別の)相互参照クエリから合流する
+        assert!(
+            issue
+                .timeline
+                .iter()
+                .any(|e| matches!(e, TimelineEntry::LinkedPr(l) if l.number == 15677)),
+            "Issue のタイムラインに紐づいた PR が出るはず"
+        );
     }
 
     #[tokio::test]
