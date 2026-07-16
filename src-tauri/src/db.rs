@@ -372,15 +372,12 @@ impl Db {
 
     pub fn delete_stream(&self, id: i64) -> Result<(), String> {
         let conn = self.lock();
+        // リンクは親行の削除で CASCADE するので、掃除対象の URL を先に控える
+        let urls =
+            linked_item_urls(&conn, "SELECT item_url FROM stream_items WHERE stream_id = ?1", id)?;
         conn.execute("DELETE FROM streams WHERE id = ?1", params![id])
             .map_err(db_err)?;
-        // どの Stream・Epic からも参照されなくなったアイテムを掃除(read_state は FK CASCADE)
-        conn.execute(
-            "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)
-               AND url NOT IN (SELECT item_url FROM epic_items)",
-            [],
-        )
-        .map_err(db_err)?;
+        gc_unlinked_items(&conn, &urls)?;
         Ok(())
     }
 
@@ -689,14 +686,7 @@ impl Db {
             )
             .map_err(db_err)?;
         }
-        if !to_remove.is_empty() {
-            conn.execute(
-                "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)
-                   AND url NOT IN (SELECT item_url FROM epic_items)",
-                [],
-            )
-            .map_err(db_err)?;
-        }
+        gc_unlinked_items(&conn, &to_remove)?;
         Ok(to_remove.len())
     }
 
@@ -798,13 +788,11 @@ impl Db {
 
     pub fn delete_epic(&self, id: i64) -> Result<(), String> {
         let conn = self.lock();
+        // リンクは親行の削除で CASCADE するので、掃除対象の URL を先に控える
+        let urls =
+            linked_item_urls(&conn, "SELECT item_url FROM epic_items WHERE epic_id = ?1", id)?;
         conn.execute("DELETE FROM epics WHERE id = ?1", params![id]).map_err(db_err)?;
-        conn.execute(
-            "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)
-               AND url NOT IN (SELECT item_url FROM epic_items)",
-            [],
-        )
-        .map_err(db_err)?;
+        gc_unlinked_items(&conn, &urls)?;
         Ok(())
     }
 
@@ -895,12 +883,7 @@ impl Db {
             params![epic_id, item_url],
         )
         .map_err(db_err)?;
-        conn.execute(
-            "DELETE FROM items WHERE url NOT IN (SELECT item_url FROM stream_items)
-               AND url NOT IN (SELECT item_url FROM epic_items)",
-            [],
-        )
-        .map_err(db_err)?;
+        gc_unlinked_items(&conn, &[item_url])?;
         Ok(())
     }
 
@@ -1089,6 +1072,35 @@ fn row_to_stream(row: &rusqlite::Row<'_>) -> rusqlite::Result<Stream> {
     })
 }
 
+/// 指定 id にリンクされているアイテム URL を集める(親行の削除で CASCADE する前に呼ぶ)
+fn linked_item_urls(conn: &Connection, sql: &str, id: i64) -> Result<Vec<String>, String> {
+    let mut stmt = conn.prepare(sql).map_err(db_err)?;
+    let urls = stmt
+        .query_map(params![id], |r| r.get(0))
+        .map_err(db_err)?
+        .collect::<Result<Vec<String>, _>>()
+        .map_err(db_err)?;
+    Ok(urls)
+}
+
+/// リンクを外した URL のうち、どの Stream/Epic からも参照されなくなった
+/// アイテム本体を削除する(read_state は FK CASCADE で一緒に消える)。
+/// items 全体を走査する形にすると、クエリ変更直後で再ポーリングによる
+/// 再リンク待ちの孤児(update_stream 参照)まで巻き添えにして既読状態を
+/// 失うため、対象は必ず「その操作で外した URL」に限定する。
+fn gc_unlinked_items<S: AsRef<str>>(conn: &Connection, urls: &[S]) -> Result<(), String> {
+    for url in urls {
+        conn.execute(
+            "DELETE FROM items WHERE url = ?1
+               AND url NOT IN (SELECT item_url FROM stream_items)
+               AND url NOT IN (SELECT item_url FROM epic_items)",
+            params![url.as_ref()],
+        )
+        .map_err(db_err)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1199,6 +1211,33 @@ mod tests {
         let items = db.list_items(id, false).unwrap();
         assert_eq!(items.len(), 1);
         assert!(items[0].is_read);
+    }
+
+    #[test]
+    fn query_change_orphans_survive_unrelated_gc() {
+        let db = test_db();
+        let b = db.create_stream("b", "involves:@me", None, 60, None).unwrap();
+        let c = db.create_stream("c", "is:closed", None, 60, None).unwrap();
+        db.upsert_items(b, &[pr_item("keep", "OPEN", false, "o/r")]).unwrap();
+        db.upsert_items(c, &[pr_item("noise", "OPEN", false, "o/r")]).unwrap();
+        db.mark_read("keep").unwrap();
+
+        // B のクエリ変更で keep はリンク解除され、再ポーリング待ちの孤児になる
+        db.update_stream(b, "b", "is:pr org:o author:bot", None, 60, true, None).unwrap();
+        // 無関係な C の prune が GC を誘発しても、遷移中の孤児を巻き添えにしない
+        assert_eq!(db.prune_stream_links(c, "is:closed").unwrap(), 1);
+        let survivors: i64 = {
+            let conn = db.lock();
+            conn.query_row("SELECT COUNT(*) FROM items WHERE url = 'keep'", [], |r| r.get(0))
+                .unwrap()
+        };
+        assert_eq!(survivors, 1, "再リンク待ちの孤児アイテムが無関係な GC で消えた");
+
+        // 再ポーリングで再リンクされたら既読状態を保っている
+        db.upsert_items(b, &[pr_item("keep", "OPEN", false, "o/r")]).unwrap();
+        let items = db.list_items(b, false).unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(items[0].is_read, "GC の巻き添えで read_state が失われた");
     }
 
     #[test]
