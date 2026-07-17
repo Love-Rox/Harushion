@@ -820,11 +820,18 @@ impl Db {
         }
         // アーカイブ済みエピックは完了済みの束なので、新規追加を受け付けない
         // (UI でも選択肢から隠すが、経路によらず弾く)
-        let archived: bool = conn
+        let archived: Option<bool> = conn
             .query_row("SELECT archived FROM epics WHERE id = ?1", params![epic_id], |r| r.get(0))
+            .map(Some)
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(other),
+            })
             .map_err(db_err)?;
-        if archived {
-            return Err("アーカイブ済みのエピックには追加できません".into());
+        match archived {
+            None => return Err("エピックが見つかりません".into()),
+            Some(true) => return Err("アーカイブ済みのエピックには追加できません".into()),
+            Some(false) => {}
         }
         conn.execute(
             "INSERT OR IGNORE INTO epic_items (epic_id, item_url, position)
@@ -1522,6 +1529,15 @@ mod tests {
         assert!(db.get_epic(eid).is_err());
         // Stream には残っているのでアイテムは消えない
         assert_eq!(db.list_items(sid, false).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn add_epic_item_reports_missing_epic() {
+        let db = test_db();
+        let sid = db.create_stream("s", "q", None, 60, None).unwrap();
+        db.upsert_items(sid, &[item("u1", "2026-07-09T00:00:00Z")]).unwrap();
+        let err = db.add_epic_item(9999, "u1").unwrap_err();
+        assert!(err.contains("エピックが見つかりません"), "{err}");
     }
 
     #[test]

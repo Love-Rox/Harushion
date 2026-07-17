@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, UIEvent as ReactUIEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode, UIEvent as ReactUIEvent } from "react";
 import type {
   Epic,
   Item,
@@ -99,6 +99,24 @@ function StatePill({
       <Octicon paths={icon} size={14} />
       {stateLabel}
     </span>
+  );
+}
+
+/** サイドバーの各セクション共通の外枠(見出し付き) */
+function SidebarSection({
+  title,
+  className,
+  children,
+}: {
+  title: string;
+  className: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={`sidebar-section ${className}`}>
+      <h4 className="sidebar-section-title">{title}</h4>
+      {children}
+    </section>
   );
 }
 
@@ -238,6 +256,8 @@ export function DetailPane({
   const addableReviewers = reviewerCandidates.filter(
     (l) => l !== detail.author && !requestedReviewers.has(l),
   );
+  // アーカイブ済みエピックは追加候補に出さない(既所属チップからの削除は残す)
+  const addableEpics = epics.filter((e) => !itemEpicIds.includes(e.id) && !e.archived);
   const isPending = (key: string) => actionPending && pendingActionKey === key;
   const label = (baseKey: MessagePath, key: string) => {
     const base = t(baseKey);
@@ -649,8 +669,7 @@ export function DetailPane({
               (detail.reviews.length > 0 ||
                 detail.reviewRequests.length > 0 ||
                 (isOpen && addableReviewers.length > 0)) && (
-                <section className="sidebar-section sec-reviewers">
-                  <h4 className="sidebar-section-title">{t("detail.reviews")}</h4>
+                <SidebarSection title={t("detail.reviews")} className="sec-reviewers">
                   <div className="sidebar-stack">
                     {detail.reviews.map((r, i) => (
                       <div key={`${r.author}-${i}`} className="review-row">
@@ -702,11 +721,10 @@ export function DetailPane({
                       </select>
                     )}
                   </div>
-                </section>
+                </SidebarSection>
               )}
 
-            <section className="sidebar-section sec-assignees">
-              <h4 className="sidebar-section-title">{t("detail.assignees")}</h4>
+            <SidebarSection title={t("detail.assignees")} className="sec-assignees">
               <div className="assignees-row">
                 {detail.assignees.length === 0 && (
                   <span className="fg-muted">{t("common.none")}</span>
@@ -728,10 +746,9 @@ export function DetailPane({
                   </button>
                 )}
               </div>
-            </section>
+            </SidebarSection>
 
-            <section className="sidebar-section sec-labels">
-              <h4 className="sidebar-section-title">{t("detail.labels")}</h4>
+            <SidebarSection title={t("detail.labels")} className="sec-labels">
               <div className="labels-row">
                 {detail.labels.map((l) => (
                   <span
@@ -795,18 +812,16 @@ export function DetailPane({
                   </div>
                 )}
               </div>
-            </section>
+            </SidebarSection>
 
             {detail.milestone && (
-              <section className="sidebar-section sec-milestone">
-                <h4 className="sidebar-section-title">{t("detail.milestoneLabel")}</h4>
+              <SidebarSection title={t("detail.milestoneLabel")} className="sec-milestone">
                 <span className="fg-muted">{detail.milestone}</span>
-              </section>
+              </SidebarSection>
             )}
 
             {(detail.projects.length > 0 || detail.projectsScopeMissing) && (
-              <section className="sidebar-section sec-projects">
-                <h4 className="sidebar-section-title">{t("detail.projects")}</h4>
+              <SidebarSection title={t("detail.projects")} className="sec-projects">
                 <div className="sidebar-stack">
                   {detail.projectsScopeMissing && (
                     <span className="fg-muted">{t("detail.projectsScopeHint")}</span>
@@ -856,12 +871,11 @@ export function DetailPane({
                     );
                   })}
                 </div>
-              </section>
+              </SidebarSection>
             )}
 
             {detail.related.length > 0 && (
-              <section className="sidebar-section sec-development">
-                <h4 className="sidebar-section-title">{t("detail.related")}</h4>
+              <SidebarSection title={t("detail.related")} className="sec-development">
                 <div className="related-list">
                   {detail.related.map((r) => (
                     <button
@@ -881,11 +895,10 @@ export function DetailPane({
                     <span className="fg-muted">+{detail.relatedTotal - detail.related.length}</span>
                   )}
                 </div>
-              </section>
+              </SidebarSection>
             )}
 
-            <section className="sidebar-section sec-epics">
-              <h4 className="sidebar-section-title">{t("detail.epics")}</h4>
+            <SidebarSection title={t("detail.epics")} className="sec-epics">
               <div className="epics-row">
                 {epics.length === 0 && <span className="fg-muted">{t("detail.noEpicsHint")}</span>}
                 {epics
@@ -909,7 +922,7 @@ export function DetailPane({
                       </button>
                     </span>
                   ))}
-                {epics.some((e) => !itemEpicIds.includes(e.id) && !e.archived) && (
+                {addableEpics.length > 0 && (
                   <select
                     className="epic-add-select"
                     value=""
@@ -919,17 +932,15 @@ export function DetailPane({
                     }}
                   >
                     <option value="">{t("detail.addToEpic")}</option>
-                    {epics
-                      .filter((e) => !itemEpicIds.includes(e.id) && !e.archived)
-                      .map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.name}
-                        </option>
-                      ))}
+                    {addableEpics.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name}
+                      </option>
+                    ))}
                   </select>
                 )}
               </div>
-            </section>
+            </SidebarSection>
           </aside>
 
           <div className="detail-main">
