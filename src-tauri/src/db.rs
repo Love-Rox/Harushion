@@ -397,27 +397,7 @@ impl Db {
         );
         let mut stmt = conn.prepare(&sql).map_err(db_err)?;
         let rows = stmt
-            .query_map(params![stream_id, unread_only], |row| {
-                Ok(StoredItem {
-                    kind: row.get(0)?,
-                    number: row.get(1)?,
-                    title: row.get(2)?,
-                    url: row.get(3)?,
-                    state: row.get(4)?,
-                    is_draft: row.get(5)?,
-                    updated_at: row.get(6)?,
-                    author: row.get(7)?,
-                    author_avatar: row.get(8)?,
-                    repo: row.get(9)?,
-                    comments: row.get(10)?,
-                    milestone: row.get(11)?,
-                    assignees: split_assignees(row.get::<_, String>(12)?),
-                    review_requests: split_assignees(row.get::<_, String>(16)?),
-                    related_count: row.get(15)?,
-                    epic_ids: split_epic_ids(row.get::<_, Option<String>>(13)?),
-                    is_read: row.get(14)?,
-                })
-            })
+            .query_map(params![stream_id, unread_only], row_to_stored_item)
             .map_err(db_err)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(db_err)?;
@@ -811,8 +791,8 @@ impl Db {
         let sql = format!(
             "SELECT i.kind, i.number, i.title, i.url, i.state, i.is_draft, i.updated_at,
                     i.author, i.author_avatar, i.repo, i.comments, i.milestone, i.assignees,
-                    (SELECT GROUP_CONCAT(ei.epic_id) FROM epic_items ei WHERE ei.item_url = i.url), {IS_READ_EXPR},
-                    ei.position, i.related_count, i.review_requests
+                    (SELECT GROUP_CONCAT(ei.epic_id) FROM epic_items ei WHERE ei.item_url = i.url), {IS_READ_EXPR}, i.related_count,
+                    i.review_requests, ei.position
              FROM epic_items ei
              JOIN items i ON i.url = ei.item_url
              LEFT JOIN read_state r ON r.item_url = i.url
@@ -822,28 +802,7 @@ impl Db {
         let mut stmt = conn.prepare(&sql).map_err(db_err)?;
         let rows = stmt
             .query_map(params![epic_id], |row| {
-                Ok(EpicRow {
-                    item: StoredItem {
-                        kind: row.get(0)?,
-                        number: row.get(1)?,
-                        title: row.get(2)?,
-                        url: row.get(3)?,
-                        state: row.get(4)?,
-                        is_draft: row.get(5)?,
-                        updated_at: row.get(6)?,
-                        author: row.get(7)?,
-                        author_avatar: row.get(8)?,
-                        repo: row.get(9)?,
-                        comments: row.get(10)?,
-                        milestone: row.get(11)?,
-                        assignees: split_assignees(row.get::<_, String>(12)?),
-                        review_requests: split_assignees(row.get::<_, String>(17)?),
-                        related_count: row.get(16)?,
-                        epic_ids: split_epic_ids(row.get::<_, Option<String>>(13)?),
-                        is_read: row.get(14)?,
-                    },
-                    epic_position: row.get(15)?,
-                })
+                Ok(EpicRow { item: row_to_stored_item(row)?, epic_position: row.get(17)? })
             })
             .map_err(db_err)?
             .collect::<Result<Vec<_>, _>>()
@@ -1042,6 +1001,31 @@ fn split_assignees(raw: String) -> Vec<String> {
 fn split_epic_ids(raw: Option<String>) -> Vec<i64> {
     raw.map(|r| r.split(',').filter_map(|p| p.parse().ok()).collect())
         .unwrap_or_default()
+}
+
+/// list_items / list_epic_items 共通の StoredItem マッピング。
+/// 両クエリの SELECT は先頭 17 列(0-16)をこの並びで揃えること。
+/// エピック側の固有列(ei.position 等)は 17 以降に足す
+fn row_to_stored_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredItem> {
+    Ok(StoredItem {
+        kind: row.get(0)?,
+        number: row.get(1)?,
+        title: row.get(2)?,
+        url: row.get(3)?,
+        state: row.get(4)?,
+        is_draft: row.get(5)?,
+        updated_at: row.get(6)?,
+        author: row.get(7)?,
+        author_avatar: row.get(8)?,
+        repo: row.get(9)?,
+        comments: row.get(10)?,
+        milestone: row.get(11)?,
+        assignees: split_assignees(row.get::<_, String>(12)?),
+        epic_ids: split_epic_ids(row.get::<_, Option<String>>(13)?),
+        is_read: row.get(14)?,
+        related_count: row.get(15)?,
+        review_requests: split_assignees(row.get::<_, String>(16)?),
+    })
 }
 
 fn row_to_epic(row: &rusqlite::Row<'_>) -> rusqlite::Result<Epic> {
