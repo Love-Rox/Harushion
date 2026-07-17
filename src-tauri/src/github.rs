@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
 const GRAPHQL_ENDPOINT: &str = "https://api.github.com/graphql";
@@ -161,7 +162,29 @@ pub async fn fetch_viewer(state: &AppState) -> Result<Viewer, String> {
     })
 }
 
-const SEARCH_QUERY: &str = r#"
+/// PR のレビュー依頼相手。一覧(SEARCH_QUERY)と詳細(DETAIL_QUERY)の PR ブロックで
+/// 共有し、片方だけ変更して読み取り経路ごとに挙動がズレるのを防ぐ。
+/// クエリ本文の __REVIEW_REQUESTS__ プレースホルダーへ展開される
+const REVIEW_REQUESTS_FRAGMENT: &str = r#"reviewRequests(first: 15) {
+  nodes {
+    requestedReviewer {
+      __typename
+      ... on User { login }
+      ... on Bot { login }
+      ... on Mannequin { login }
+      ... on Team { combinedSlug }
+    }
+  }
+}"#;
+
+fn expand_fragments(query: &str) -> String {
+    query.replace("__REVIEW_REQUESTS__", REVIEW_REQUESTS_FRAGMENT)
+}
+
+static SEARCH_QUERY: LazyLock<String> = LazyLock::new(|| expand_fragments(SEARCH_QUERY_TEMPLATE));
+static DETAIL_QUERY: LazyLock<String> = LazyLock::new(|| expand_fragments(DETAIL_QUERY_TEMPLATE));
+
+const SEARCH_QUERY_TEMPLATE: &str = r#"
 query($q: String!, $first: Int!, $after: String) {
   search(query: $q, type: ISSUE, first: $first, after: $after) {
     pageInfo { hasNextPage endCursor }
@@ -184,17 +207,7 @@ query($q: String!, $first: Int!, $after: String) {
         comments { totalCount }
         milestone { title }
         assignees(first: 10) { nodes { login } }
-        reviewRequests(first: 15) {
-          nodes {
-            requestedReviewer {
-              __typename
-              ... on User { login }
-              ... on Bot { login }
-              ... on Mannequin { login }
-              ... on Team { combinedSlug }
-            }
-          }
-        }
+        __REVIEW_REQUESTS__
         timelineItems(itemTypes: [CROSS_REFERENCED_EVENT]) { totalCount }
         closingIssuesReferences { totalCount }
       }
@@ -204,6 +217,19 @@ query($q: String!, $first: Int!, $after: String) {
 "#;
 
 const SEARCH_PAGE_SIZE: u32 = 50;
+
+/// `parent { nodes [ { field } ] }` 形の接続から文字列フィールドを列挙する
+/// (assignees や assignableUsers の login 抽出など、頻出パターンの共通形)
+fn extract_field_strings(parent: &Value, field: &str) -> Vec<String> {
+    parent["nodes"]
+        .as_array()
+        .map(|ns| {
+            ns.iter()
+                .filter_map(|n| n[field].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
 /// reviewRequests ノードからレビュー依頼中の相手を取り出す。
 /// User/Bot/Mannequin は login、Team は "org/team-slug"
@@ -236,7 +262,7 @@ pub async fn search_items(state: &AppState, query: &str, max_total: u32) -> Resu
         }
         let data = state
             .graphql(
-                SEARCH_QUERY,
+                &SEARCH_QUERY,
                 json!({ "q": query, "first": SEARCH_PAGE_SIZE.min(remaining), "after": after }),
             )
             .await?;
@@ -268,10 +294,7 @@ pub async fn search_items(state: &AppState, query: &str, max_total: u32) -> Resu
                     .to_string(),
                 comments: node["comments"]["totalCount"].as_i64().unwrap_or(0),
                 milestone: node["milestone"]["title"].as_str().map(String::from),
-                assignees: node["assignees"]["nodes"]
-                    .as_array()
-                    .map(|ns| ns.iter().filter_map(|n| n["login"].as_str().map(String::from)).collect())
-                    .unwrap_or_default(),
+                assignees: extract_field_strings(&node["assignees"], "login"),
                 review_requests: parse_review_requests(node),
                 related_count: node["timelineItems"]["totalCount"].as_i64().unwrap_or(0)
                     + node["closedByPullRequestsReferences"]["totalCount"].as_i64().unwrap_or(0)
@@ -471,7 +494,7 @@ pub struct ItemDetail {
     pub related_total: i64,
 }
 
-const DETAIL_QUERY: &str = r#"
+const DETAIL_QUERY_TEMPLATE: &str = r#"
 query($url: URI!) {
   resource(url: $url) {
     __typename
@@ -532,17 +555,7 @@ query($url: URI!) {
         }
       }
       latestReviews(first: 15) { nodes { author { login } state } }
-      reviewRequests(first: 15) {
-        nodes {
-          requestedReviewer {
-            __typename
-            ... on User { login }
-            ... on Bot { login }
-            ... on Mannequin { login }
-            ... on Team { combinedSlug }
-          }
-        }
-      }
+      __REVIEW_REQUESTS__
       timeline: timelineItems(last: 40, itemTypes: [ISSUE_COMMENT, PULL_REQUEST_COMMIT]) {
         totalCount
         nodes {
@@ -926,35 +939,17 @@ query($owner: String!, $name: String!) {
             json!({ "owner": owner, "name": name }),
         )
         .await?;
-    Ok(data["repository"]["assignableUsers"]["nodes"]
-        .as_array()
-        .map(|ns| {
-            ns.iter()
-                .filter_map(|n| n["login"].as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default())
+    Ok(extract_field_strings(&data["repository"]["assignableUsers"], "login"))
 }
 
 pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail, String> {
-    let data = state.graphql(DETAIL_QUERY, json!({ "url": url })).await?;
+    let data = state.graphql(&DETAIL_QUERY, json!({ "url": url })).await?;
     let node = &data["resource"];
 
     let kind = match node["__typename"].as_str() {
         Some("Issue") => "issue",
         Some("PullRequest") => "pr",
         _ => return Err("この URL は Issue / Pull Request ではありません".into()),
-    };
-
-    let names = |key: &str, field: &str| -> Vec<String> {
-        node[key]["nodes"]
-            .as_array()
-            .map(|ns| {
-                ns.iter()
-                    .filter_map(|n| n[field].as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default()
     };
 
     let labels = node["labels"]["nodes"]
@@ -1049,7 +1044,7 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
             .unwrap_or_default()
             .to_string(),
         labels,
-        assignees: names("assignees", "login"),
+        assignees: extract_field_strings(&node["assignees"], "login"),
         milestone: node["milestone"]["title"].as_str().map(String::from),
         base_ref: node["baseRefName"].as_str().map(String::from),
         head_ref: node["headRefName"].as_str().map(String::from),
@@ -1139,6 +1134,18 @@ mod tests {
         );
         // この Issue は他の Issue から複数回言及されている(相互参照メンションの実データ検証)
         assert!(!detail.related.is_empty(), "相互参照メンションが取れるはず");
+    }
+
+    #[test]
+    fn queries_expand_review_requests_fragment() {
+        for (name, q) in [("SEARCH_QUERY", &*SEARCH_QUERY), ("DETAIL_QUERY", &*DETAIL_QUERY)] {
+            assert!(!q.contains("__REVIEW_REQUESTS__"), "{name} にプレースホルダーが残っている");
+            assert_eq!(
+                q.matches("reviewRequests(first: 15)").count(),
+                1,
+                "{name} にフラグメントが1回だけ展開されるはず"
+            );
+        }
     }
 
     #[test]
