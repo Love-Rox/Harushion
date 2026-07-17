@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter, Manager};
@@ -5,6 +7,25 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::db::{Db, DueStream};
 use crate::github::{self, AppState};
+
+/// 実行中ポーリングの stream id 集合。15秒 tick と手動更新(poll_stream_now)が
+/// 同じ Stream を同時に叩いて GitHub Search API を二重消費しないための排他
+static IN_FLIGHT: LazyLock<Mutex<HashSet<i64>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
+
+/// IN_FLIGHT への登録を Drop で確実に解除する RAII ガード
+struct PollGuard(i64);
+
+impl PollGuard {
+    fn acquire(id: i64) -> Option<Self> {
+        IN_FLIGHT.lock().unwrap().insert(id).then(|| Self(id))
+    }
+}
+
+impl Drop for PollGuard {
+    fn drop(&mut self) {
+        IN_FLIGHT.lock().unwrap().remove(&self.0);
+    }
+}
 
 const TICK: Duration = Duration::from_secs(15);
 /// 1 回のポーリングで取得する検索結果の上限(50件/ページでページング)。
@@ -43,6 +64,11 @@ async fn tick(app: &AppHandle) -> Result<(), String> {
 /// Stream を 1 回ポーリングして新着数を返す。notify=true なら新着を OS 通知する
 /// (初回ポーリングはバックフィルなので通知しない)。
 pub async fn poll_stream(app: &AppHandle, stream: &DueStream, notify: bool) -> Result<usize, String> {
+    // 同じ Stream が既にポーリング中なら何もしない(完了側が items-updated を emit する)
+    let Some(_guard) = PollGuard::acquire(stream.id) else {
+        return Ok(0);
+    };
+
     // query は改行区切りで複数の検索クエリを持てる(結果を OR マージ、URL で重複排除)
     let items = {
         let gh = app.state::<AppState>();
@@ -82,4 +108,18 @@ pub async fn poll_stream(app: &AppHandle, stream: &DueStream, notify: bool) -> R
         }
     }
     Ok(fresh.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poll_guard_blocks_same_stream_and_releases_on_drop() {
+        let g = PollGuard::acquire(42).expect("first acquire");
+        assert!(PollGuard::acquire(42).is_none(), "同一 stream の並行実行は弾く");
+        assert!(PollGuard::acquire(43).is_some(), "別 stream は並行できる");
+        drop(g);
+        assert!(PollGuard::acquire(42).is_some(), "解放後は再取得できる");
+    }
 }

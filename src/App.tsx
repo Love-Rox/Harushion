@@ -464,18 +464,35 @@ function App() {
     }
   };
 
+  // 指定 Stream を即時ポーリングし、streams と(選択中なら)items を再読込する。
+  // 選択状態は await 後に変わりうるので ref で読む
+  const pollStreamAndRefresh = useCallback(
+    async (streamId: number) => {
+      const isSelected = selectedStreamIdRef.current === streamId;
+      if (isSelected) {
+        setPolling(true);
+        setError(null);
+      }
+      try {
+        await invoke<number>("poll_stream_now", { streamId });
+        await Promise.all([
+          loadStreams(),
+          selectedStreamIdRef.current === streamId
+            ? loadItems(streamId, unreadOnlyRef.current)
+            : Promise.resolve(),
+        ]);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        if (isSelected) setPolling(false);
+      }
+    },
+    [loadStreams, loadItems],
+  );
+
   const handlePollNow = async () => {
     if (selectedStreamId == null) return;
-    setPolling(true);
-    setError(null);
-    try {
-      await invoke<number>("poll_stream_now", { streamId: selectedStreamId });
-      await Promise.all([loadStreams(), loadItems(selectedStreamId, unreadOnly)]);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setPolling(false);
-    }
+    await pollStreamAndRefresh(selectedStreamId);
   };
 
   const handleSelectStream = (id: number) => {
@@ -534,23 +551,12 @@ function App() {
   const handleUpdateStream = async (data: StreamUpdateInput) => {
     const prevQuery = streams.find((s) => s.id === data.id)?.query;
     await invoke<Stream>("update_stream", data);
-    await loadStreams();
     // クエリ変更時はリンクが張り直される(旧クエリのアイテムが外れて空になる)ので、
-    // 15秒の tick を待たずに即再取得する
+    // 15秒の tick を待たずに即再取得する。streams の再読込は poll 後の1回にまとめる
     if (prevQuery !== undefined && prevQuery !== data.query) {
-      const isSelected = selectedStreamId === data.id;
-      if (isSelected) setPolling(true);
-      try {
-        await invoke<number>("poll_stream_now", { streamId: data.id });
-        await Promise.all([
-          loadStreams(),
-          isSelected ? loadItems(data.id, unreadOnly) : Promise.resolve(),
-        ]);
-      } catch (e) {
-        setError(String(e));
-      } finally {
-        if (isSelected) setPolling(false);
-      }
+      await pollStreamAndRefresh(data.id);
+    } else {
+      await loadStreams();
     }
   };
 
