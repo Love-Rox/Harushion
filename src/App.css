@@ -1406,6 +1406,78 @@ code {
   font-size: 13px;
 }
 
+/* インラインレビューのスレッド(未解決は open、解決済みは畳んで出す) */
+.review-thread {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+
+.review-thread-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+}
+
+.review-thread-summary::-webkit-details-marker {
+  display: none;
+}
+
+.review-thread-summary::before {
+  content: "▸";
+  flex-shrink: 0;
+  color: var(--fg-muted);
+  font-size: 10px;
+}
+
+.review-thread[open] > .review-thread-summary::before {
+  content: "▾";
+}
+
+.review-thread-path {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-thread-summary .commit-time {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.thread-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.review-thread-hunk {
+  margin: 0;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.review-thread-comment {
+  border-top: 1px solid var(--border);
+}
+
 .commit-message {
   flex: 1;
   min-width: 0;

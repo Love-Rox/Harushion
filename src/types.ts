@@ -113,11 +113,31 @@ export type ReviewEntryInfo = {
   createdAt: string; // ISO8601
 };
 
+// インラインレビューのスレッド内の1コメント
+export type ReviewThreadComment = {
+  author: string | null;
+  authorAvatar: string | null;
+  bodyHtml: string;
+  createdAt: string; // ISO8601
+};
+
+// PR タイムラインに混ざるインラインレビューのスレッド(コード行への指摘と返信)
+export type ReviewThreadInfo = {
+  path: string;
+  line: number | null;
+  isResolved: boolean;
+  isOutdated: boolean;
+  diffHunk: string; // 末尾数行に切り詰めた抜粋
+  createdAt: string; // 先頭コメントの時刻(タイムライン整列用)
+  comments: ReviewThreadComment[];
+};
+
 export type TimelineEntry =
   | ({ kind: "comment" } & CommentInfo)
   | ({ kind: "commit" } & CommitInfo)
   | ({ kind: "linkedPr" } & LinkedPrInfo)
-  | ({ kind: "review" } & ReviewEntryInfo);
+  | ({ kind: "review" } & ReviewEntryInfo)
+  | ({ kind: "reviewThread" } & ReviewThreadInfo);
 
 // Development リンク(Issue⇔PR)。Issue 詳細では関連 PR、PR 詳細では関連 Issue が入る
 export type RelatedItem = {

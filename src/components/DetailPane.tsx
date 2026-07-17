@@ -8,6 +8,7 @@ import type {
   LabelInfo,
   MergeMethod,
   RelatedItem,
+  ReviewThreadInfo,
   Viewer,
 } from "../types";
 import { relativeTime } from "./format";
@@ -99,6 +100,50 @@ function StatePill({
       <Octicon paths={icon} size={14} />
       {stateLabel}
     </span>
+  );
+}
+
+/** インラインレビューのスレッド。未解決は開いた状態、解決済みは畳んだ状態で出す */
+function ReviewThreadBlock({
+  thread,
+  onMdClick,
+}: {
+  thread: ReviewThreadInfo;
+  onMdClick: (e: ReactMouseEvent<HTMLDivElement>) => void;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(!thread.isResolved);
+  return (
+    <details className="review-thread" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="review-thread-summary">
+        <code className="review-thread-path">
+          {thread.path}
+          {thread.line != null && `:${thread.line}`}
+        </code>
+        {thread.isResolved && (
+          <span className="thread-badge resolved">{t("detail.threadResolved")}</span>
+        )}
+        {thread.isOutdated && (
+          <span className="thread-badge outdated">{t("detail.threadOutdated")}</span>
+        )}
+        <span className="commit-time">{relativeTime(thread.createdAt)}</span>
+      </summary>
+      {thread.diffHunk && <pre className="review-thread-hunk">{thread.diffHunk}</pre>}
+      {thread.comments.map((c, j) => (
+        <div key={j} className="review-thread-comment">
+          <div className="comment-header">
+            {c.authorAvatar && <img src={c.authorAvatar} className="avatar avatar-small" alt="" />}
+            <span className="comment-author">{c.author ?? "unknown"}</span>
+            <span className="comment-time">{relativeTime(c.createdAt)}</span>
+          </div>
+          <div
+            className="md comment-body"
+            onClick={onMdClick}
+            dangerouslySetInnerHTML={{ __html: c.bodyHtml }}
+          />
+        </div>
+      ))}
+    </details>
   );
 }
 
@@ -1000,6 +1045,8 @@ export function DetailPane({
                     <code className="commit-oid">{e.shortOid}</code>
                     <span className="commit-time">{relativeTime(e.date)}</span>
                   </div>
+                ) : e.kind === "reviewThread" ? (
+                  <ReviewThreadBlock key={i} thread={e} onMdClick={handleMdClick} />
                 ) : e.kind === "review" ? (
                   e.bodyHtml ? (
                     <article className="comment-card" key={i}>

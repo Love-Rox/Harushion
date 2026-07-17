@@ -89,6 +89,8 @@ export const ja = {
     assignMe: "自分をアサイン",
     unassign: "アサイン解除",
     reviews: "レビュー",
+    threadResolved: "解決済み",
+    threadOutdated: "古い差分",
     reviewRequested: "リクエスト中",
     addReviewer: "+ レビュワー…",
     removeReviewer: "{name} へのレビュー依頼を解除",

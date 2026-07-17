@@ -449,6 +449,30 @@ pub struct ReviewEntryInfo {
     pub created_at: String,
 }
 
+/// インラインレビューのスレッド内の1コメント
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewThreadComment {
+    pub author: Option<String>,
+    pub author_avatar: Option<String>,
+    pub body_html: String,
+    pub created_at: String,
+}
+
+/// PR タイムラインに混ぜるインラインレビューのスレッド(コード行への指摘と返信)。
+/// created_at は先頭コメントの時刻(タイムライン整列用)
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewThreadInfo {
+    pub path: String,
+    pub line: Option<i64>,
+    pub is_resolved: bool,
+    pub is_outdated: bool,
+    pub diff_hunk: String,
+    pub created_at: String,
+    pub comments: Vec<ReviewThreadComment>,
+}
+
 /// kind タグ付きでフラットに serialize される({"kind":"comment", ...CommentInfo})
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -457,6 +481,7 @@ pub enum TimelineEntry {
     Commit(CommitInfo),
     LinkedPr(LinkedPrInfo),
     Review(ReviewEntryInfo),
+    ReviewThread(ReviewThreadInfo),
 }
 
 #[derive(Serialize)]
@@ -570,6 +595,14 @@ query($url: URI!) {
       latestReviews(first: 15) { nodes { author { login } state } }
       timelineReviews: reviews(last: 20) {
         nodes { author { login avatarUrl } bodyHTML state createdAt }
+      }
+      reviewThreads(first: 30) {
+        nodes {
+          isResolved isOutdated path line
+          comments(first: 15) {
+            nodes { author { login avatarUrl } bodyHTML createdAt diffHunk }
+          }
+        }
       }
       __REVIEW_REQUESTS__
       timeline: timelineItems(last: 40, itemTypes: [ISSUE_COMMENT, PULL_REQUEST_COMMIT]) {
@@ -716,8 +749,57 @@ fn parse_pr_timeline(node: &Value) -> (Vec<TimelineEntry>, i64) {
         .unwrap_or_default();
     total += reviews.len() as i64;
     entries.extend(reviews);
+    let threads = parse_review_threads(node);
+    total += threads.len() as i64;
+    entries.extend(threads);
     entries.sort_by(|a, b| entry_created_at(a).cmp(entry_created_at(b)));
     (entries, total)
+}
+
+/// インラインレビューのスレッド。閲覧権限やコメント全削除で空になったスレッドは出さない
+fn parse_review_threads(node: &Value) -> Vec<TimelineEntry> {
+    node["reviewThreads"]["nodes"]
+        .as_array()
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|n| {
+                    let comments: Vec<ReviewThreadComment> = n["comments"]["nodes"]
+                        .as_array()?
+                        .iter()
+                        .filter_map(|c| {
+                            Some(ReviewThreadComment {
+                                author: c["author"]["login"].as_str().map(String::from),
+                                author_avatar: c["author"]["avatarUrl"].as_str().map(String::from),
+                                body_html: c["bodyHTML"].as_str()?.to_string(),
+                                created_at: c["createdAt"].as_str().unwrap_or_default().to_string(),
+                            })
+                        })
+                        .collect();
+                    let created_at = comments.first()?.created_at.clone();
+                    Some(TimelineEntry::ReviewThread(ReviewThreadInfo {
+                        path: n["path"].as_str().unwrap_or_default().to_string(),
+                        line: n["line"].as_i64(),
+                        is_resolved: n["isResolved"].as_bool().unwrap_or(false),
+                        is_outdated: n["isOutdated"].as_bool().unwrap_or(false),
+                        diff_hunk: trim_diff_hunk(
+                            n["comments"]["nodes"][0]["diffHunk"].as_str().unwrap_or_default(),
+                        ),
+                        created_at,
+                        comments,
+                    }))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// diffHunk はハンク先頭からコメント行までのパッチ全体が来るので、
+/// 文脈として意味のある末尾(コメント対象行とその直前)だけ残す
+fn trim_diff_hunk(hunk: &str) -> String {
+    let lines: Vec<&str> = hunk.lines().collect();
+    let tail = lines.len().saturating_sub(4);
+    lines[tail..].join("\n")
 }
 
 fn entry_created_at(e: &TimelineEntry) -> &str {
@@ -726,6 +808,7 @@ fn entry_created_at(e: &TimelineEntry) -> &str {
         TimelineEntry::Commit(c) => &c.date,
         TimelineEntry::LinkedPr(l) => &l.created_at,
         TimelineEntry::Review(r) => &r.created_at,
+        TimelineEntry::ReviewThread(th) => &th.created_at,
     }
 }
 
@@ -1273,6 +1356,51 @@ mod tests {
     }
 
     #[test]
+    fn pr_timeline_merges_review_threads_at_first_comment_time() {
+        let node = json!({
+            "timeline": {
+                "totalCount": 1,
+                "nodes": [
+                    { "__typename": "IssueComment", "author": { "login": "a", "avatarUrl": "av" },
+                      "bodyHTML": "<p>c</p>", "createdAt": "2026-07-03T00:00:00Z" }
+                ]
+            },
+            "timelineReviews": { "nodes": [] },
+            "reviewThreads": {
+                "nodes": [
+                    { "isResolved": true, "isOutdated": false, "path": "src/a.rs", "line": 5,
+                      "comments": { "nodes": [
+                          { "author": { "login": "rev", "avatarUrl": "av" }, "bodyHTML": "<p>ここ直して</p>",
+                            "createdAt": "2026-07-01T00:00:00Z",
+                            "diffHunk": "@@ -1,5 +1,5 @@\n l1\n l2\n l3\n+l4\n+l5" },
+                          { "author": { "login": "auth", "avatarUrl": "av" }, "bodyHTML": "<p>直した</p>",
+                            "createdAt": "2026-07-02T00:00:00Z", "diffHunk": "" }
+                      ] } },
+                    // コメントが空のスレッド(全削除等)は出さない
+                    { "isResolved": false, "isOutdated": false, "path": "src/b.rs", "line": null,
+                      "comments": { "nodes": [] } }
+                ]
+            }
+        });
+
+        let (entries, total) = parse_pr_timeline(&node);
+        assert_eq!(entries.len(), 2);
+        // スレッドは先頭コメントの時刻(7/1)で整列し、7/3 のコメントより前に来る
+        match &entries[0] {
+            TimelineEntry::ReviewThread(th) => {
+                assert_eq!((th.path.as_str(), th.line, th.is_resolved), ("src/a.rs", Some(5), true));
+                assert_eq!(th.comments.len(), 2);
+                // diffHunk は末尾4行に切り詰める(文脈行の先頭スペースは diff 形式のまま)
+                assert_eq!(th.diff_hunk, " l2\n l3\n+l4\n+l5");
+            }
+            other => panic!("expected ReviewThread, got {}", serde_json::to_string(other).unwrap()),
+        }
+        assert!(matches!(&entries[1], TimelineEntry::Comment(_)));
+        // total = timeline totalCount(1) + 表示したスレッド数(1)
+        assert_eq!(total, 2);
+    }
+
+    #[test]
     fn extracts_mentioned_item_urls_from_body_html() {
         let body = r##"<p>
             <a href="https://github.com/o/r/issues/12">#12</a>
@@ -1306,6 +1434,15 @@ mod tests {
             pr.related.iter().any(|r| r.kind == "issue" && r.number == 15672),
             "PR 側に閉じた Issue が出るはず: {:?}",
             pr.related.iter().map(|r| r.number).collect::<Vec<_>>()
+        );
+        // この PR は解決済みインラインレビュー 1 件を持つ(reviewThreads の実データ検証)
+        assert!(
+            pr.timeline.iter().any(|e| matches!(
+                e,
+                TimelineEntry::ReviewThread(th)
+                    if th.is_resolved && th.path == ".changes/change-pr-15677.md" && !th.comments.is_empty()
+            )),
+            "PR タイムラインにインラインレビューのスレッドが出るはず"
         );
         let issue = fetch_item_detail(&state, "https://github.com/tauri-apps/tauri/issues/15672")
             .await

@@ -90,6 +90,8 @@ export const en: Messages = {
     assignMe: "Assign myself",
     unassign: "Unassign",
     reviews: "Reviews",
+    threadResolved: "Resolved",
+    threadOutdated: "Outdated",
     reviewRequested: "Requested",
     addReviewer: "+ Reviewer…",
     removeReviewer: "Remove review request for {name}",
