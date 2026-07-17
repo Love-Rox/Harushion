@@ -1397,6 +1397,15 @@ code {
   text-decoration: underline;
 }
 
+/* タイムライン内の本文なしレビュー(承認のみ等)の行 */
+.review-event-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
 .commit-message {
   flex: 1;
   min-width: 0;
@@ -1450,7 +1459,9 @@ code {
 }
 
 .commit-row > .avatar,
-.commit-row > .avatar-placeholder {
+.commit-row > .avatar-placeholder,
+.review-event-row > .avatar,
+.review-event-row > .avatar-placeholder {
   box-shadow: 0 0 0 3px var(--bg);
 }
 

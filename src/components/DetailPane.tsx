@@ -1000,6 +1000,40 @@ export function DetailPane({
                     <code className="commit-oid">{e.shortOid}</code>
                     <span className="commit-time">{relativeTime(e.date)}</span>
                   </div>
+                ) : e.kind === "review" ? (
+                  e.bodyHtml ? (
+                    <article className="comment-card" key={i}>
+                      <div className="comment-header">
+                        {e.authorAvatar && (
+                          <img src={e.authorAvatar} className="avatar avatar-small" alt="" />
+                        )}
+                        <span className="comment-author">{e.author ?? "unknown"}</span>
+                        <span className={`review-state-badge rs-${e.state.toLowerCase()}`}>
+                          {reviewStateLabel(t, e.state)}
+                        </span>
+                        <span className="comment-time">{relativeTime(e.createdAt)}</span>
+                      </div>
+                      <div
+                        className="md comment-body"
+                        onClick={handleMdClick}
+                        dangerouslySetInnerHTML={{ __html: e.bodyHtml }}
+                      />
+                    </article>
+                  ) : (
+                    // 本文なし(承認のみ・インラインコメントのみ)は状態バッジだけの行
+                    <div key={i} className="review-event-row">
+                      {e.authorAvatar ? (
+                        <img src={e.authorAvatar} className="avatar avatar-small" alt="" />
+                      ) : (
+                        <span className="avatar avatar-small avatar-placeholder" />
+                      )}
+                      <span className="commit-author">{e.author ?? "unknown"}</span>
+                      <span className={`review-state-badge rs-${e.state.toLowerCase()}`}>
+                        {reviewStateLabel(t, e.state)}
+                      </span>
+                      <span className="commit-time">{relativeTime(e.createdAt)}</span>
+                    </div>
+                  )
                 ) : (
                   <button
                     key={i}

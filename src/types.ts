@@ -104,10 +104,20 @@ export type LinkedPrInfo = {
 };
 
 // コメント・コミット・紐づきPRを時系列で混ぜたタイムラインの1エントリ(GitHub の Conversation 相当)
+// PR タイムラインに混ざる提出済みレビュー。bodyHtml は空のことも多い(承認のみ等)
+export type ReviewEntryInfo = {
+  author: string | null;
+  authorAvatar: string | null;
+  state: string; // APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED
+  bodyHtml: string;
+  createdAt: string; // ISO8601
+};
+
 export type TimelineEntry =
   | ({ kind: "comment" } & CommentInfo)
   | ({ kind: "commit" } & CommitInfo)
-  | ({ kind: "linkedPr" } & LinkedPrInfo);
+  | ({ kind: "linkedPr" } & LinkedPrInfo)
+  | ({ kind: "review" } & ReviewEntryInfo);
 
 // Development リンク(Issue⇔PR)。Issue 詳細では関連 PR、PR 詳細では関連 Issue が入る
 export type RelatedItem = {

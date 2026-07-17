@@ -437,6 +437,18 @@ pub struct LinkedPrInfo {
     pub created_at: String,
 }
 
+/// PR のタイムラインに混ぜる提出済みレビュー。
+/// body_html は空のことも多い(承認のみ・インラインコメントのみ等)
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewEntryInfo {
+    pub author: Option<String>,
+    pub author_avatar: Option<String>,
+    pub state: String,
+    pub body_html: String,
+    pub created_at: String,
+}
+
 /// kind タグ付きでフラットに serialize される({"kind":"comment", ...CommentInfo})
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -444,6 +456,7 @@ pub enum TimelineEntry {
     Comment(CommentInfo),
     Commit(CommitInfo),
     LinkedPr(LinkedPrInfo),
+    Review(ReviewEntryInfo),
 }
 
 #[derive(Serialize)]
@@ -555,6 +568,9 @@ query($url: URI!) {
         }
       }
       latestReviews(first: 15) { nodes { author { login } state } }
+      timelineReviews: reviews(last: 20) {
+        nodes { author { login avatarUrl } bodyHTML state createdAt }
+      }
       __REVIEW_REQUESTS__
       timeline: timelineItems(last: 40, itemTypes: [ISSUE_COMMENT, PULL_REQUEST_COMMIT]) {
         totalCount
@@ -669,11 +685,47 @@ fn parse_issue_timeline(node: &Value) -> (Vec<TimelineEntry>, i64) {
     (entries, total)
 }
 
+/// PR のタイムライン。コメント+コミットの timeline に、提出済みレビュー
+/// (reviews 接続)を時系列で合流させる。timelineItems の PULL_REQUEST_REVIEW を
+/// 使わないのは、totalCount が閲覧できないイベントまで数える(実データで
+/// nodes 1 件に対し totalCount 12 を確認)ため。表示する件数だけ total に足し、
+/// 「他{n}件」の差分が実際に隠れている件数と一致するようにする
+fn parse_pr_timeline(node: &Value) -> (Vec<TimelineEntry>, i64) {
+    let (mut entries, mut total) = parse_timeline(node);
+    let reviews: Vec<TimelineEntry> = node["timelineReviews"]["nodes"]
+        .as_array()
+        .map(|nodes| {
+            nodes
+                .iter()
+                .filter_map(|n| {
+                    // PENDING は未提出のレビュー(本人にしか見えない)なので出さない
+                    let state = n["state"].as_str()?;
+                    if state == "PENDING" {
+                        return None;
+                    }
+                    Some(TimelineEntry::Review(ReviewEntryInfo {
+                        author: n["author"]["login"].as_str().map(String::from),
+                        author_avatar: n["author"]["avatarUrl"].as_str().map(String::from),
+                        state: state.to_string(),
+                        body_html: n["bodyHTML"].as_str().unwrap_or_default().to_string(),
+                        created_at: n["createdAt"].as_str().unwrap_or_default().to_string(),
+                    }))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    total += reviews.len() as i64;
+    entries.extend(reviews);
+    entries.sort_by(|a, b| entry_created_at(a).cmp(entry_created_at(b)));
+    (entries, total)
+}
+
 fn entry_created_at(e: &TimelineEntry) -> &str {
     match e {
         TimelineEntry::Comment(c) => &c.created_at,
         TimelineEntry::Commit(c) => &c.date,
         TimelineEntry::LinkedPr(l) => &l.created_at,
+        TimelineEntry::Review(r) => &r.created_at,
     }
 }
 
@@ -983,7 +1035,7 @@ pub async fn fetch_item_detail(state: &AppState, url: &str) -> Result<ItemDetail
     let review_requests = parse_review_requests(node);
 
     let (timeline, timeline_total) =
-        if kind == "issue" { parse_issue_timeline(node) } else { parse_timeline(node) };
+        if kind == "issue" { parse_issue_timeline(node) } else { parse_pr_timeline(node) };
 
     // 関連 = Development リンク + 本文で言及した相手 + 自分に言及した相手(URL で重複排除)。
     // 本文言及の解決失敗で詳細表示全体を壊さないよう、そこだけベストエフォート
@@ -1189,6 +1241,38 @@ mod tests {
     }
 
     #[test]
+    fn pr_timeline_merges_submitted_reviews_and_skips_pending() {
+        let node = json!({
+            "timeline": {
+                "totalCount": 5,
+                "nodes": [
+                    { "__typename": "IssueComment", "author": { "login": "a", "avatarUrl": "av" },
+                      "bodyHTML": "<p>c</p>", "createdAt": "2026-07-01T00:00:00Z" }
+                ]
+            },
+            "timelineReviews": {
+                "nodes": [
+                    { "author": { "login": "rev" }, "bodyHTML": "<p>LGTM</p>",
+                      "state": "APPROVED", "createdAt": "2026-07-02T00:00:00Z" },
+                    // 未提出レビューは本人にしか見えないのでタイムラインに出さない
+                    { "author": { "login": "me" }, "bodyHTML": "",
+                      "state": "PENDING", "createdAt": "2026-07-03T00:00:00Z" }
+                ]
+            }
+        });
+
+        let (entries, total) = parse_pr_timeline(&node);
+        assert_eq!(entries.len(), 2);
+        assert!(matches!(&entries[0], TimelineEntry::Comment(_)));
+        assert!(matches!(
+            &entries[1],
+            TimelineEntry::Review(r) if r.state == "APPROVED" && r.body_html == "<p>LGTM</p>"
+        ));
+        // total は timeline の totalCount + 表示したレビュー数(PENDING は数えない)
+        assert_eq!(total, 6);
+    }
+
+    #[test]
     fn extracts_mentioned_item_urls_from_body_html() {
         let body = r##"<p>
             <a href="https://github.com/o/r/issues/12">#12</a>
@@ -1256,6 +1340,13 @@ mod tests {
         assert!(detail.head_ref.is_some());
         assert!(detail.changed_files > 0);
         assert!(detail.timeline_total >= detail.timeline.len() as i64);
+        // この PR は amrbashir の承認レビューを持つ(提出済みレビューの実データ検証)
+        assert!(
+            detail.timeline.iter().any(
+                |e| matches!(e, TimelineEntry::Review(r) if r.state == "APPROVED" && r.author.as_deref() == Some("amrbashir"))
+            ),
+            "PR タイムラインに提出済みレビューが出るはず"
+        );
         let commit = detail
             .timeline
             .iter()
