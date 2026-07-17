@@ -79,7 +79,9 @@ function App() {
   const [actionPending, setActionPending] = useState(false);
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
   const [repoLabels, setRepoLabels] = useState<Record<string, LabelInfo[]>>({});
-  const [repoReviewers, setRepoReviewers] = useState<Record<string, string[]>>({});
+  // レビュワー候補のキャッシュ。state にすると取得完了のたびに loadReviewerCandidates の
+  // 参照が変わり、DetailPane 側の effect が再発火して候補欄がちらつくので ref で持つ
+  const repoReviewersRef = useRef<Record<string, string[]>>({});
   const [itemEpicIds, setItemEpicIds] = useState<number[]>([]);
 
   const [view, setView] = useState<View>({ type: "stream" });
@@ -411,16 +413,13 @@ function App() {
     [repoLabels],
   );
 
-  const loadReviewerCandidates = useCallback(
-    async (repo: string): Promise<string[]> => {
-      const cached = repoReviewers[repo];
-      if (cached) return cached;
-      const result = await invoke<string[]>("list_reviewer_candidates", { repo });
-      setRepoReviewers((prev) => ({ ...prev, [repo]: result }));
-      return result;
-    },
-    [repoReviewers],
-  );
+  const loadReviewerCandidates = useCallback(async (repo: string): Promise<string[]> => {
+    const cached = repoReviewersRef.current[repo];
+    if (cached) return cached;
+    const result = await invoke<string[]>("list_reviewer_candidates", { repo });
+    repoReviewersRef.current[repo] = result;
+    return result;
+  }, []);
 
   const handleAction = async (action: ItemAction): Promise<boolean> => {
     if (!selectedItem) return false;
