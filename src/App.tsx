@@ -105,12 +105,20 @@ function App() {
     unreadOnlyRef.current = unreadOnly;
   }, [unreadOnly]);
 
-  // Stream の未読合計を Dock/タスクバーのバッジへ反映(streams は既読操作・ポーリングの
-  // たびに再取得されるので、これで常に追従する)
+  // Stream の未読合計を Dock/タスクバーのバッジへ反映。streams は既読操作・ポーリングの
+  // たびに新しい配列になるため、合計値を deps にして値が変わったときだけ OS へ送る
+  const unreadTotal = streams.reduce((acc, s) => acc + s.unreadCount, 0);
   useEffect(() => {
-    const total = streams.reduce((acc, s) => acc + s.unreadCount, 0);
-    invoke<void>("set_app_badge", { mode: badgeMode, count: total }).catch(() => {});
-  }, [streams, badgeMode]);
+    invoke<void>("set_app_badge", { mode: badgeMode, count: unreadTotal }).catch(() => {});
+  }, [unreadTotal, badgeMode]);
+
+  // バッジ設定の選択肢を OS に合わせて絞るためのターゲット OS 名
+  const [platform, setPlatform] = useState("");
+  useEffect(() => {
+    invoke<string>("get_platform")
+      .then(setPlatform)
+      .catch(() => {});
+  }, []);
 
   const handleBadgeModeChange = (mode: BadgeMode) => {
     setBadgeMode(mode);
@@ -866,6 +874,7 @@ function App() {
         <SettingsModal
           badgeMode={badgeMode}
           onBadgeModeChange={handleBadgeModeChange}
+          platform={platform}
           onClose={() => setSettingsOpen(false)}
         />
       )}

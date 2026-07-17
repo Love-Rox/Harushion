@@ -8,10 +8,12 @@ import type { BadgeMode } from "../badge";
 type Props = {
   badgeMode: BadgeMode;
   onBadgeModeChange: (mode: BadgeMode) => void;
+  /** ビルド時ターゲット OS("macos" / "windows" / "linux" 等)。バッジ対応が OS で異なる */
+  platform: string;
   onClose: () => void;
 };
 
-export function SettingsModal({ badgeMode, onBadgeModeChange, onClose }: Props) {
+export function SettingsModal({ badgeMode, onBadgeModeChange, platform, onClose }: Props) {
   const { t, locale, setLocale } = useI18n();
   const [theme, setTheme] = useState<ThemePreference>(getThemePreference());
   const overlayMouseDownRef = useRef(false);
@@ -55,14 +57,20 @@ export function SettingsModal({ badgeMode, onBadgeModeChange, onClose }: Props) 
 
         <label className="field">
           <span className="field-label">{t("settings.badgeLabel")}</span>
-          <select
-            value={badgeMode}
-            onChange={(e) => onBadgeModeChange(e.target.value as BadgeMode)}
-          >
-            <option value="count">{t("settings.badgeCount")}</option>
-            <option value="dot">{t("settings.badgeDot")}</option>
-            <option value="none">{t("settings.badgeNone")}</option>
-          </select>
+          {platform === "windows" ? (
+            // Windows は tauri のバッジ API が未実装で何も表示されない
+            <span className="fg-muted">{t("settings.badgeUnsupported")}</span>
+          ) : (
+            <select
+              // Linux はドット非対応(件数で代用)なので、保存済みの "dot" は件数として見せる
+              value={platform === "linux" && badgeMode === "dot" ? "count" : badgeMode}
+              onChange={(e) => onBadgeModeChange(e.target.value as BadgeMode)}
+            >
+              <option value="count">{t("settings.badgeCount")}</option>
+              {platform !== "linux" && <option value="dot">{t("settings.badgeDot")}</option>}
+              <option value="none">{t("settings.badgeNone")}</option>
+            </select>
+          )}
         </label>
 
         <div className="modal-actions settings-modal-actions">

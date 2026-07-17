@@ -7,6 +7,7 @@ export const ja = {
     badgeCount: "未読件数を表示",
     badgeDot: "未読があることを表示",
     badgeNone: "表示しない",
+    badgeUnsupported: "この OS はアプリアイコンのバッジ表示に対応していません",
   },
   common: {
     add: "追加",

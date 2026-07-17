@@ -184,6 +184,14 @@ fn set_app_badge(window: tauri::WebviewWindow, mode: String, count: i64) -> Resu
     Ok(())
 }
 
+/// ビルド時ターゲット OS("macos" / "windows" / "linux" 等)。
+/// バッジ表示は OS ごとに能力が違う(Windows 非対応・Linux は件数のみ)ため、
+/// フロントが設定の選択肢を絞るのに使う
+#[tauri::command]
+fn get_platform() -> &'static str {
+    std::env::consts::OS
+}
+
 #[tauri::command]
 async fn check_for_update(state: State<'_, AppState>) -> Result<Option<updater::UpdateInfo>, String> {
     updater::check_update(&state).await
@@ -395,6 +403,7 @@ pub fn run() {
             list_reviewer_candidates,
             open_in_app_browser,
             set_app_badge,
+            get_platform,
             list_graph_repos,
             add_graph_repo,
             remove_graph_repo,

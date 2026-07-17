@@ -9,6 +9,7 @@ export const en: Messages = {
     badgeCount: "Show unread count",
     badgeDot: "Show a dot",
     badgeNone: "Off",
+    badgeUnsupported: "App icon badges are not supported on this OS",
   },
   common: {
     add: "Add",
