@@ -884,29 +884,6 @@ code {
   color: var(--fg-muted);
 }
 
-/* DOM 順は据え置き、表示順だけ GitHub のサイドバーに合わせる */
-.sec-reviewers {
-  order: 1;
-}
-.sec-assignees {
-  order: 2;
-}
-.sec-labels {
-  order: 3;
-}
-.sec-milestone {
-  order: 4;
-}
-.sec-projects {
-  order: 5;
-}
-.sec-development {
-  order: 6;
-}
-.sec-epics {
-  order: 7;
-}
-
 .sidebar-stack {
   position: relative;
   display: flex;

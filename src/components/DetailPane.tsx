@@ -645,6 +645,91 @@ export function DetailPane({
 
         <div className="detail-columns">
           <aside className="detail-sidebar">
+            {detail.kind === "pr" &&
+              (detail.reviews.length > 0 ||
+                detail.reviewRequests.length > 0 ||
+                (isOpen && addableReviewers.length > 0)) && (
+                <section className="sidebar-section sec-reviewers">
+                  <h4 className="sidebar-section-title">{t("detail.reviews")}</h4>
+                  <div className="sidebar-stack">
+                    {detail.reviews.map((r, i) => (
+                      <div key={`${r.author}-${i}`} className="review-row">
+                        <span className="review-author">{r.author ?? "unknown"}</span>
+                        <span className={`review-state-badge rs-${r.state.toLowerCase()}`}>
+                          {reviewStateLabel(t, r.state)}
+                        </span>
+                      </div>
+                    ))}
+                    {detail.reviewRequests.map((login) => (
+                      <div key={login} className="review-row">
+                        <span className="review-author">{login}</span>
+                        <span className="review-state-badge rs-requested">
+                          {t("detail.reviewRequested")}
+                        </span>
+                        {isOpen && (
+                          <button
+                            type="button"
+                            className="chip-remove"
+                            disabled={actionPending}
+                            onClick={() =>
+                              void onAction({ type: "editReviewers", add: [], remove: [login] })
+                            }
+                            aria-label={t("detail.removeReviewer", { name: login })}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {isOpen && addableReviewers.length > 0 && (
+                      <select
+                        className="epic-add-select"
+                        value=""
+                        disabled={actionPending}
+                        onChange={(e) => {
+                          const login = e.target.value;
+                          if (login) {
+                            void onAction({ type: "editReviewers", add: [login], remove: [] });
+                          }
+                        }}
+                      >
+                        <option value="">{t("detail.addReviewer")}</option>
+                        {addableReviewers.map((login) => (
+                          <option key={login} value={login}>
+                            {login}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </section>
+              )}
+
+            <section className="sidebar-section sec-assignees">
+              <h4 className="sidebar-section-title">{t("detail.assignees")}</h4>
+              <div className="assignees-row">
+                {detail.assignees.length === 0 && (
+                  <span className="fg-muted">{t("common.none")}</span>
+                )}
+                {detail.assignees.map((a) => (
+                  <span key={a} className="assignee-chip">
+                    {a}
+                  </span>
+                ))}
+                {viewer && (
+                  <button
+                    className="btn btn-small"
+                    onClick={handleAssignToggle}
+                    disabled={actionPending}
+                  >
+                    {isAssignedToMe
+                      ? label("detail.unassign", "assignMe")
+                      : label("detail.assignMe", "assignMe")}
+                  </button>
+                )}
+              </div>
+            </section>
+
             <section className="sidebar-section sec-labels">
               <h4 className="sidebar-section-title">{t("detail.labels")}</h4>
               <div className="labels-row">
@@ -712,77 +797,12 @@ export function DetailPane({
               </div>
             </section>
 
-            <section className="sidebar-section sec-assignees">
-              <h4 className="sidebar-section-title">{t("detail.assignees")}</h4>
-              <div className="assignees-row">
-                {detail.assignees.length === 0 && (
-                  <span className="fg-muted">{t("common.none")}</span>
-                )}
-                {detail.assignees.map((a) => (
-                  <span key={a} className="assignee-chip">
-                    {a}
-                  </span>
-                ))}
-                {viewer && (
-                  <button
-                    className="btn btn-small"
-                    onClick={handleAssignToggle}
-                    disabled={actionPending}
-                  >
-                    {isAssignedToMe
-                      ? label("detail.unassign", "assignMe")
-                      : label("detail.assignMe", "assignMe")}
-                  </button>
-                )}
-              </div>
-            </section>
-
-            <section className="sidebar-section sec-epics">
-              <h4 className="sidebar-section-title">{t("detail.epics")}</h4>
-              <div className="epics-row">
-                {epics.length === 0 && <span className="fg-muted">{t("detail.noEpicsHint")}</span>}
-                {epics
-                  .filter((e) => itemEpicIds.includes(e.id))
-                  .map((e) => (
-                    <span
-                      key={e.id}
-                      className="epic-chip"
-                      style={
-                        e.color ? { borderColor: `#${e.color}`, color: `#${e.color}` } : undefined
-                      }
-                    >
-                      {e.name}
-                      <button
-                        type="button"
-                        className="chip-remove"
-                        onClick={() => onRemoveFromEpic(e.id)}
-                        aria-label={t("detail.removeFromEpic", { name: e.name })}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                {epics.some((e) => !itemEpicIds.includes(e.id) && !e.archived) && (
-                  <select
-                    className="epic-add-select"
-                    value=""
-                    onChange={(e) => {
-                      const id = Number(e.target.value);
-                      if (id) onAddToEpic(id);
-                    }}
-                  >
-                    <option value="">{t("detail.addToEpic")}</option>
-                    {epics
-                      .filter((e) => !itemEpicIds.includes(e.id) && !e.archived)
-                      .map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.name}
-                        </option>
-                      ))}
-                  </select>
-                )}
-              </div>
-            </section>
+            {detail.milestone && (
+              <section className="sidebar-section sec-milestone">
+                <h4 className="sidebar-section-title">{t("detail.milestoneLabel")}</h4>
+                <span className="fg-muted">{detail.milestone}</span>
+              </section>
+            )}
 
             {(detail.projects.length > 0 || detail.projectsScopeMissing) && (
               <section className="sidebar-section sec-projects">
@@ -864,72 +884,52 @@ export function DetailPane({
               </section>
             )}
 
-            {detail.kind === "pr" &&
-              (detail.reviews.length > 0 ||
-                detail.reviewRequests.length > 0 ||
-                (isOpen && addableReviewers.length > 0)) && (
-                <section className="sidebar-section sec-reviewers">
-                  <h4 className="sidebar-section-title">{t("detail.reviews")}</h4>
-                  <div className="sidebar-stack">
-                    {detail.reviews.map((r, i) => (
-                      <div key={`${r.author}-${i}`} className="review-row">
-                        <span className="review-author">{r.author ?? "unknown"}</span>
-                        <span className={`review-state-badge rs-${r.state.toLowerCase()}`}>
-                          {reviewStateLabel(t, r.state)}
-                        </span>
-                      </div>
-                    ))}
-                    {detail.reviewRequests.map((login) => (
-                      <div key={login} className="review-row">
-                        <span className="review-author">{login}</span>
-                        <span className="review-state-badge rs-requested">
-                          {t("detail.reviewRequested")}
-                        </span>
-                        {isOpen && (
-                          <button
-                            type="button"
-                            className="chip-remove"
-                            disabled={actionPending}
-                            onClick={() =>
-                              void onAction({ type: "editReviewers", add: [], remove: [login] })
-                            }
-                            aria-label={t("detail.removeReviewer", { name: login })}
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    {isOpen && addableReviewers.length > 0 && (
-                      <select
-                        className="epic-add-select"
-                        value=""
-                        disabled={actionPending}
-                        onChange={(e) => {
-                          const login = e.target.value;
-                          if (login) {
-                            void onAction({ type: "editReviewers", add: [login], remove: [] });
-                          }
-                        }}
+            <section className="sidebar-section sec-epics">
+              <h4 className="sidebar-section-title">{t("detail.epics")}</h4>
+              <div className="epics-row">
+                {epics.length === 0 && <span className="fg-muted">{t("detail.noEpicsHint")}</span>}
+                {epics
+                  .filter((e) => itemEpicIds.includes(e.id))
+                  .map((e) => (
+                    <span
+                      key={e.id}
+                      className="epic-chip"
+                      style={
+                        e.color ? { borderColor: `#${e.color}`, color: `#${e.color}` } : undefined
+                      }
+                    >
+                      {e.name}
+                      <button
+                        type="button"
+                        className="chip-remove"
+                        onClick={() => onRemoveFromEpic(e.id)}
+                        aria-label={t("detail.removeFromEpic", { name: e.name })}
                       >
-                        <option value="">{t("detail.addReviewer")}</option>
-                        {addableReviewers.map((login) => (
-                          <option key={login} value={login}>
-                            {login}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                </section>
-              )}
-
-            {detail.milestone && (
-              <section className="sidebar-section sec-milestone">
-                <h4 className="sidebar-section-title">{t("detail.milestoneLabel")}</h4>
-                <span className="fg-muted">{detail.milestone}</span>
-              </section>
-            )}
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                {epics.some((e) => !itemEpicIds.includes(e.id) && !e.archived) && (
+                  <select
+                    className="epic-add-select"
+                    value=""
+                    onChange={(e) => {
+                      const id = Number(e.target.value);
+                      if (id) onAddToEpic(id);
+                    }}
+                  >
+                    <option value="">{t("detail.addToEpic")}</option>
+                    {epics
+                      .filter((e) => !itemEpicIds.includes(e.id) && !e.archived)
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            </section>
           </aside>
 
           <div className="detail-main">
