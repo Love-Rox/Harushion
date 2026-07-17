@@ -359,7 +359,9 @@ export function DetailPane({
   const renderMergeBox = () => {
     if (detail.kind !== "pr") return null;
     const open = detail.state === "OPEN";
-    if (!open && detail.checks.length === 0) return null;
+    // closed/merged でもレビュー判定(Approved 等)は履歴として見せる。
+    // チェックも判定も無いときだけ箱ごと省略する
+    if (!open && detail.checks.length === 0 && !detail.reviewDecision) return null;
     return (
       <div className="merge-box">
         {(detail.reviewDecision || (open && detail.mergeable)) && (
